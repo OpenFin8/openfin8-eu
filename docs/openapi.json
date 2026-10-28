@@ -1,0 +1,19 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "openfin8-eu",
+    "version": "0.1.0",
+    "description": "Sentin8 OpenFin8:EU - European open finance (Berlin Group openFinance V2: AIS/PIS/PIIS, SCA approaches, eIDAS certificates). The openFinance OpenAPI files are CC BY 4.0; resource paths carried with attribution."
+  },
+  "paths": {
+    "/v1/health": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    }
+  }
+}
