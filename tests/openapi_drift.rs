@@ -62,7 +62,7 @@ fn spec_covers_every_served_route_and_vice_versa() {
     // the ceremonies + PIS + baskets + AIS/PIIS + the extended set).
     assert!(
         spec.len() >= 25,
-        "spec floor: expected >= 25 ops for the landed XS2A surface, got {}",
+        "spec floor: expected >= 25 ops for the XS2A surface, got {}",
         spec.len()
     );
 }
