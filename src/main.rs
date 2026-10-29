@@ -8,20 +8,15 @@
 //! the SCA approaches (redirect/decoupled/embedded), eIDAS
 //! QWAC/QSEALC certificates, consent authorisation pre-steps, and
 //! signing baskets. See
-//! `DESIGN.md` (OBARCH-7).
+//! `DESIGN.md`.
 //!
 //! This service embeds `openfin8-core` (the jurisdiction-agnostic
-//! kernel - OBARCH-1) and supplies the EU profile, the XS2A ceremony (bank-by-bank DCR + eIDAS
+//! kernel) and supplies the EU profile, the XS2A ceremony (bank-by-bank DCR + eIDAS
 //! certs + the three SCA approaches), and the openFinance V2
-//! resource router.
+//! resource router. See `DESIGN.md` §2-§5 for the wire, the
+//! ceremonies, and the served surface.
 //!
-//! Skeleton - the OBARCH-1 core extraction lands first; this binary
-//! then takes the XS2A consent + authorisation model over core's
-//! `awaiting_authorization` state (the four-state XS2A consent
-//! machine + the pre-step), the SCA approach ceremonies, and its
-//! registration data.
-//!
-//! Spec publication (OBARCH-2) is the vendored-with-attribution case:
+//! Spec publication is the vendored-with-attribution case:
 //! the Berlin Group OpenAPI files are CC BY 4.0 (copying and
 //! adaptation permitted with attribution), so the published
 //! `docs/openapi.json` MAY carry the openFinance resource paths

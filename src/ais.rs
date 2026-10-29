@@ -3,8 +3,8 @@
 // SPDX-FileCopyrightText: Copyright Contributors to the OpenFin8:EU
 // SPDX-License-Identifier: Apache-2.0
 
-//! AIS + PIIS resource surfaces (OBARCH-7 - EU DESIGN.md §2 AIS/PIIS rows;
-//! backlog EU-6).
+//! AIS + PIIS resource surfaces- EU DESIGN.md §2 AIS/PIIS rows;
+//! ).
 //!
 //! **AIS**: accounts, balances, transactions, card accounts behind an AIS
 //! consent - the consent middleware chokepoint (every kernel invariant

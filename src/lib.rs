@@ -10,7 +10,7 @@
 //! trust path in `eidas.rs`; PIS + signing baskets in `payments.rs`;
 //! the AIS/PIIS surfaces in `ais.rs`; the Extended Services in
 //! `extended.rs`; the routes in `router.rs`; the registration data in
-//! `registration.rs` - see DESIGN.md (OBARCH-7).
+//! `registration.rs` - see DESIGN.md).
 
 pub mod ais;
 pub mod ceremony;

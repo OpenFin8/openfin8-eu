@@ -70,7 +70,7 @@ CREATE INDEX IF NOT EXISTS idx_openfin8_eu_consents_status ON openfin8_eu.consen
 -- Each SCA ceremony is its own object under the consent (DESIGN.md §3.4):
 -- created via the pre-step (`startAuthorisation`, optionally selecting
 -- the SCA approach BEFORE the PSU ceremony begins), then driven through
--- its own per-approach state machine by the Flow ceremonies (EU-3).
+-- its own per-approach state machine by the Flow ceremonies.
 -- Separation of state machines (DESIGN.md §7): an authorisation reaching
 -- FINALISED never mutates the consent's status directly - the consent
 -- transitions when the adapter observes the authorisation outcome.
@@ -95,7 +95,7 @@ CREATE TABLE IF NOT EXISTS openfin8_eu.consent_authorisations (
                     CHECK (approach IN ('redirect', 'decoupled', 'embedded')),
     -- The PSU identity once identified (the bank customer's sub).
     psu_id          TEXT,
-    -- The Flow execution id driving this ceremony (EU-3 lands the
+    -- The Flow execution id driving this ceremony (
     -- per-approach step sequences; absent = not yet started).
     flow_execution_id UUID,
     -- The ceremony's own expiry (the XS2A authorisation window).
@@ -113,7 +113,7 @@ CREATE INDEX IF NOT EXISTS idx_openfin8_eu_auths_status ON openfin8_eu.consent_a
 -- One PSU ceremony authorizing multiple consents + payments (DESIGN.md
 -- §2): the basket is its own object; its authorisation sub-resource is
 -- the shared SCA ceremony; the member rows ride consent_id (NULL for
--- payment-only members - payments join at EU-5 by their own ids).
+-- payment-only members - payments join by their own ids).
 CREATE TABLE IF NOT EXISTS openfin8_eu.signing_baskets (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     env_id          UUID NOT NULL,
@@ -131,7 +131,7 @@ CREATE TABLE IF NOT EXISTS openfin8_eu.signing_basket_items (
     -- The batched consent (or NULL when the item is payment-only).
     consent_id      UUID REFERENCES openfin8_eu.consents(id),
     -- The batched payment's own id (the PIS payment resource; joined by
-    -- the payments surface when EU-5 lands the ISO payment products).
+    -- the payments surface joining the ISO payment products).
     payment_id      TEXT,
     created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -205,7 +205,7 @@ CREATE TABLE IF NOT EXISTS openfin8_eu.provider_profiles (
 );
 
 -- ── The producer tables (the platform contract: outbox + audit) ──────
--- The local outbox (WARN-5's full-column shape - the SDK contract every
+-- The local outbox (the SDK's full-column shape - the contract every
 -- init.sql mirrors): one row per emitted event, drained by the shell's
 -- relay (boot step 8b) to Bus with `openfin8-eu` family frames.
 CREATE TABLE IF NOT EXISTS openfin8_eu.outbox (

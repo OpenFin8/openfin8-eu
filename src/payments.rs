@@ -3,8 +3,8 @@
 // SPDX-FileCopyrightText: Copyright Contributors to the OpenFin8:EU
 // SPDX-License-Identifier: Apache-2.0
 
-//! PIS + signing baskets (OBARCH-7 - EU DESIGN.md §2 PIS + signing-basket
-//! rows, §4 money movement; backlog EU-5).
+//! PIS + signing baskets- EU DESIGN.md §2 PIS + signing-basket
+//! rows, §4 money movement; ).
 //!
 //! The ISO payment products proxy to **Bank8:Payments** through the
 //! public API + the `bank8::` SDK contracts ONLY (the OBVERT invariant -

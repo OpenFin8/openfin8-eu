@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: Copyright Contributors to the OpenFin8:EU
 // SPDX-License-Identifier: Apache-2.0
 
-//! The XS2A consent + authorisation model (OBARCH-7 - EU DESIGN.md §2
+//! The XS2A consent + authorisation model- EU DESIGN.md §2
 //! Consent API row, §3 ceremony 4, §7 invariants).
 //!
 //! Two separate state machines that are NEVER conflated (DESIGN.md §7):
@@ -22,7 +22,7 @@
 //! SCA success (an authorisation reaching `finalised`) never mutates the
 //! consent directly: the consent transitions when the adapter observes
 //! the authorisation outcome (`valid` when the PSU ceremony completes).
-//! The per-approach step sequences are Flow-driven (EU-3); this module
+//! The per-approach step sequences are Flow-driven; this module
 //! owns the model + the Consent API routes over `openfin8_eu`.
 
 use axum::{
@@ -250,7 +250,7 @@ pub struct AuthorisationResponse {
 
 /// The EU adapter's application state: the kernel profile + the pool +
 /// the Shield engine + the auth client (the real gate - steps 1-5) + the
-/// proxy-lane transports (EU-5/EU-6) + the served SCA approach list
+/// proxy-lane transports + the served SCA approach list
 /// (honest per-environment configuration, EU DESIGN.md §5).
 #[derive(Clone)]
 pub struct AppState {
@@ -274,8 +274,7 @@ pub struct AppState {
     /// The Payments base URL.
     pub payments_url: String,
     /// The eIDAS configuration state: true when all four QSEALC/QWAC
-    /// secret references are configured (EU-4; PIS fails closed when
-    /// absent - `eids_configured`).
+    /// secret references are configured.
     pub eidas_configured: bool,
     /// The served openFinance version (from the profile).
     pub of_version: String,

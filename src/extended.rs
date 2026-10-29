@@ -3,8 +3,8 @@
 // SPDX-FileCopyrightText: Copyright Contributors to the OpenFin8:EU
 // SPDX-License-Identifier: Apache-2.0
 
-//! The Extended Services suite (OBARCH-7 - EU DESIGN.md §2 Extended row;
-//! backlog EU-7).
+//! The Extended Services suite- EU DESIGN.md §2 Extended row;
+//! ).
 //!
 //! Scoped per BUSINESS §2 row 6: **mandates**, **RTP (request-to-pay)**,
 //! **push AIS**, **discovery**, **documents**. Each surface answers

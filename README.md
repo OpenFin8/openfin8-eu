@@ -12,7 +12,7 @@ bank-by-bank DCR (no central directory), eIDAS QWAC/QSEALC
 certificates, and the three SCA approaches (redirect mandatory;
 decoupled + embedded conditional per the RTS).
 
-The **XS2A surface is implemented** (OBARCH-7, backlog EU-1..EU-9):
+The **served XS2A surface**:
 
 - the **consent + authorisation model** - the four-state consent
   machine over the kernel's `awaiting_authorization` state, the
@@ -47,10 +47,10 @@ The **XS2A surface is implemented** (OBARCH-7, backlog EU-1..EU-9):
 
 The schema is `openfin8_eu` (consents, authorisations, signing
 baskets, the recipient registry, the provider catalog; FORCE-RLS
-env-pinned). Remaining: the browser-driven PSU SCA page (the
-recipient-app story), the real QSEALC material verification (the
-resolved-key path over the fixture), and the extended resource
-families as they ship.
+env-pinned). The deferred surfaces: the browser-driven PSU SCA page
+(the recipient-app story), the real QSEALC material verification
+(the resolved-key path over the fixture), and the extended resource
+families.
 
 - [Architecture (DDD)](https://github.com/OpenFin8/openfin8-eu/blob/main/DESIGN.md)
 - [Business (BRD)](https://github.com/OpenFin8/openfin8-eu/blob/main/BUSINESS.md)

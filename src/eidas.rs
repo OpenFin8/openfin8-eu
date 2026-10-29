@@ -3,8 +3,8 @@
 // SPDX-FileCopyrightText: Copyright Contributors to the OpenFin8:EU
 // SPDX-License-Identifier: Apache-2.0
 
-//! The eIDAS trust path + bank-by-bank DCR (OBARCH-7 - EU DESIGN.md §3
-//! ceremonies 1-2, §5, §7 invariant 1; backlog EU-4).
+//! The eIDAS trust path + bank-by-bank DCR- EU DESIGN.md §3
+//! ceremonies 1-2, §5, §7 invariant 1; ).
 //!
 //! **No central directory**: recipient onboarding is DCR per ASPSP
 //! (RFC 7591) against each bank's own AS - the EU trust model (contrast

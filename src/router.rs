@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: Copyright Contributors to the OpenFin8:EU
 // SPDX-License-Identifier: Apache-2.0
 
-//! The EU adapter's router + state (OBARCH-7).
+//! The EU adapter's router + state).
 //!
 //! The XS2A wire is adapter-owned (a different wire family from the
 //! kernel's FDX surface - `openfin8-core/src/traits.rs` names it): the
@@ -89,7 +89,7 @@ pub async fn build_state(core: sentin8::shell::ServiceCore) -> anyhow::Result<Ap
         }
     };
 
-    // EU-4: the eIDAS certificate references (secret references only).
+    // : the eIDAS certificate references (secret references only).
     // A partial/invalid configuration fails LOUDLY at boot (the pair is
     // a unit); absent = the PIS surface fails closed per-invocation.
     let eidas_configured = match crate::eidas::eidas_refs_from_env() {
@@ -171,7 +171,7 @@ macro_rules! eu_routes {
                 "/v1/consents/{id}/authorisations/{authorisationId}",
                 get(consent::get_authorisation),
             )
-            // ── The SCA ceremonies (EU-3): redirect, decoupled, embedded.
+            // ── The SCA ceremonies: redirect, decoupled, embedded.
             .route(
                 "/v1/consents/{id}/authorisations/{authorisationId}/redirect",
                 post(ceremony::start_redirect),
@@ -196,7 +196,7 @@ macro_rules! eu_routes {
                 "/v1/consents/{id}/authorisations/{authorisationId}/embedded/answer",
                 post(ceremony::answer_embedded),
             )
-            // ── PIS (EU-5): the ISO payment products + status + cancellation.
+            // ── PIS: the ISO payment products + status + cancellation.
             .route(
                 "/v1/payments/{paymentProduct}",
                 post(payments::create_payment),
@@ -205,10 +205,10 @@ macro_rules! eu_routes {
                 "/v1/payments/{paymentProduct}/{paymentId}",
                 get(payments::get_payment_status).delete(payments::cancel_payment),
             )
-            // ── Signing baskets (EU-5): the batch authorization.
+            // ── Signing baskets: the batch authorization.
             .route("/v1/signing-baskets", post(payments::create_basket))
             .route("/v1/signing-baskets/{basketId}", get(payments::get_basket))
-            // ── AIS (EU-6): the resource surfaces behind the chokepoint.
+            // ── AIS: the resource surfaces behind the chokepoint.
             .route(
                 "/v1/ais/consents/{consentId}/accounts",
                 get(ais::get_accounts),
@@ -225,12 +225,12 @@ macro_rules! eu_routes {
                 "/v1/ais/consents/{consentId}/card-accounts",
                 get(ais::get_card_accounts),
             )
-            // ── PIIS (EU-6): the funds-confirmation check.
+            // ── PIIS: the funds-confirmation check.
             .route(
                 "/v1/piis/consents/{consentId}/funds-confirmations",
                 post(ais::confirm_funds),
             )
-            // ── The Extended Services (EU-7).
+            // ── The Extended Services.
             .route("/v1/discovery", get(extended::discovery))
             .route("/v1/mandates", get(extended::list_mandates))
             .route("/v1/request-to-pay", get(extended::list_request_to_pay))

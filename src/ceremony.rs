@@ -3,8 +3,8 @@
 // SPDX-FileCopyrightText: Copyright Contributors to the OpenFin8:EU
 // SPDX-License-Identifier: Apache-2.0
 
-//! The SCA approach ceremonies (OBARCH-7 - EU DESIGN.md §3 ceremony 3,
-//! §7 invariants; backlog EU-3).
+//! The SCA approach ceremonies- EU DESIGN.md §3 ceremony 3,
+//! §7 invariants; ).
 //!
 //! Three interaction modes between the PSU, the ASPSP, and the TPP, each
 //! with its own contract, all driving the SAME authorisation sub-resource
@@ -209,7 +209,7 @@ pub async fn start_redirect(
     Ok(Json(RedirectStartResponse {
         authorisation_id,
         // The ASPSP SCA page this deployment serves (the platform
-        // ingress form; EU-8's e2e drives the real page).
+        // ingress form; e2e drives the real page).
         redirect_url: format!("/sca/{authorisation_id}"),
         status: "sca_started".into(),
         approach: SCA_APPROACH_REDIRECT.into(),

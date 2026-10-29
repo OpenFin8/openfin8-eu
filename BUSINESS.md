@@ -1,10 +1,7 @@
 # OpenFin8:EU - Business Requirements & Functionality
 
-> Status: **IN IMPLEMENTATION** (OBARCH-7). This BRD records the business
-> scope the European adapter will deliver; section 9 lists the
-> implementation acceptance criteria - the consent + authorisation
-> model (bullet 2) has LANDED (backlog EU-2); the service is otherwise
-> a skeleton (bullet 1 - current state).
+> The European adapter. This BRD records the business scope the
+> adapter delivers; section 9 lists the acceptance criteria.
 >
 > Audience: product owners, business analysts. For architecture read
 > `README.md`; for wire-level detail read `DESIGN.md`.
@@ -14,7 +11,7 @@
 OpenFin8:EU is **European open finance**: the Berlin Group
 **openFinance API Framework** (the NextGenPSD2 successor - the
 standard's own name moved to open finance), serving AISPs, PISPs,
-and PIISs over the XS2A wire. It will deliver:
+and PIISs over the XS2A wire. It delivers:
 
 - **PSD2-compliant account access + payment initiation** - the
   mandated EU surface: AIS, PIS, and PIIS with the consent-
@@ -76,7 +73,7 @@ if a market demands them.
 Family `openfin8:eu:*`: consent + authorisation lifecycles, payment
 lifecycles, basket events.
 
-## 5. Business Rules & Invariants (as designed)
+## 5. Business Rules & Invariants
 
 - Every kernel invariant holds.
 - Payment initiation verifies the QSEALC signature; SCA success is
@@ -109,33 +106,31 @@ The kernel + platform set, plus: **eIDAS QWAC/QSEALC certificates**
 
 ## 9. Acceptance Criteria (the implementation's definition of done)
 
-- The skeleton builds + the publication guard passes (vendored with
-  CC BY attribution) - **current state**.
-- The XS2A consent + authorisation model over the kernel lands (the
-  four-state consent machine + the pre-step) - **LANDED (EU-2)**.
-- All three SCA approach ceremonies green against Auth (redirect
-  mandatory; decoupled + embedded conditional) - **LANDED (EU-3)**:
-  the three ceremony routes over the per-approach machine + the Flow
-  step-handler profile; the Auth ceremony drive rides the recipient-app
-  story (the browser-driven PSU page).
+- The publication guard passes (vendored with the CC BY attribution;
+  the published spec carries the openFinance resource paths with the
+  attribution preserved).
+- The XS2A consent + authorisation model over the kernel: the
+  four-state consent machine + the authorisation sub-resources + the
+  pre-step (`src/consent.rs` + the `openfin8_eu` schema + the Consent
+  API routes); the state machines are pure + unit-tested.
+- All three SCA approach ceremonies (redirect mandatory; decoupled +
+  embedded conditional): the ceremony routes over the per-approach
+  machine + the Flow step-handler profile; the Auth ceremony drive
+  rides the recipient-app story (the browser-driven PSU page).
 - The signing-basket batch flow + the ISO payment products through
-  Payments - **LANDED (EU-5)**: the batch authorization + the four ISO
-  products through the Payments public API, behind the fail-closed
-  QSEALC verification (EU invariant 1).
-- The e2e journey gains the redirect-SCA AIS + PIS flows - **LANDED
-  (EU-8)**: `openfin8_eu_xs2a_journey.spec.ts` (the discovery contract,
-  the redirect ceremony to VALID, the failed-challenge isolation, the
+  Payments: the batch authorization + the four ISO products through
+  the Payments public API, behind the fail-closed QSEALC verification
+  (the QSEALC invariant).
+- AIS + PIIS behind the consent chokepoint; the Extended Services
+  answer honestly until their resource families ship (discovery
+  served; mandates/RTP/push-AIS/documents 501, never stubbed data);
+  the eIDAS trust path is secret-referenced + bank-by-bank DCR-shaped
+  (the resolved-key verification is the production material story);
+  the published spec + site unit + the drift guard.
+- The e2e journey drives the redirect-SCA AIS + PIS flows
+  (`openfin8_eu_xs2a_journey.spec.ts`: the discovery contract, the
+  redirect ceremony to VALID, the failed-challenge isolation, the
   QSEALC fail-closed verdict, the honest 501s).
-- AIS + PIIS behind the consent chokepoint - **LANDED (EU-6)**; the
-  Extended Services answer honestly until their resource families ship
-  (**EU-7**: discovery served; mandates/RTP/push-AIS/documents 501,
-  never stubbed data); the eIDAS trust path is secret-referenced +
-  bank-by-bank DCR-shaped (**EU-4**; the resolved-key verification is
-  the production material story); the published spec + site unit +
-  drift guard landed (**EU-9**).
-- The signing-basket batch flow + the ISO payment products through
-  Payments.
-- The e2e journey gains the redirect-SCA AIS + PIS flows.
 
 ## 10. Open Business Questions
 

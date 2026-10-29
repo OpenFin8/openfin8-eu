@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: Copyright Contributors to the OpenFin8:EU
 // SPDX-License-Identifier: Apache-2.0
 
-//! OpenAPI publication drift guard (OBARCH-2 - the vendored case).
+//! OpenAPI publication drift guard (the vendored case).
 //!
 //! The Berlin Group openFinance specifications are published under Creative Commons Attribution 4.0 (CC BY 4.0)
 //! so the published spec MAY carry the BGOF resource paths. The
@@ -12,7 +12,7 @@
 //! 1. The BGOF attribution/copyright notice is present in the
 //!    spec's info block (the licence requires it to travel with any
 //!    copied material).
-//! 2. Standard-surface paths (when the wire lands, OBARCH-7) conform
+//! 2. Standard-surface paths (as the wire lands) conform
 //!    to the BGOF prefixes; nothing masquerades as another
 //!    standard's surface (no /fdx/, no /open-banking/ leaks here).
 //! 3. The OpenFin8-owned operation floor holds.

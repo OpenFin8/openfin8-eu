@@ -3,7 +3,7 @@
 // SPDX-FileCopyrightText: Copyright Contributors to the OpenFin8:EU
 // SPDX-License-Identifier: Apache-2.0
 
-//! Service self-registration data for OpenFin8:EU (OBARCH-7).
+//! Service self-registration data for OpenFin8:EU).
 //! Output via `--print-registration` flag. See `sentin8/design/sentin8-service-self-registration-design.md`.
 //!
 //! The shape follows the `openfin8-ca` registration (the per-jurisdiction

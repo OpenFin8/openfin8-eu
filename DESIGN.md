@@ -1,29 +1,13 @@
 # openfin8-eu - Detailed Design Document
 
-> Status: **IMPLEMENTED (first full pass)** - the European open-finance
-> adapter (OBARCH-7). The Berlin Group **openFinance API Framework** (the
-> NextGenPSD2 successor - the standard's own name moved to open
-> finance), V2 line (XS2A V2.4.x, Consent API 2.2.x). Depends on:
-> `openfin8-core` (OBARCH-1; `Profile::european_union()` on tag
-> `openfin8-v0.1.2`). Read `openfin8-uk/DESIGN.md` for the sibling
-> design; this document defines the EU deltas. **Note**: the heaviest
-> adapter of the set - three SCA interaction modes, no central
-> directory, and PSD3/FDA in flight.
->
-> **Landed (backlog EU-1..EU-9)**: the full XS2A surface - the consent
-> + authorisation model (`src/consent.rs`), the three SCA ceremonies
-> + the Flow step-handler profile (`src/ceremony.rs`), the eIDAS
-> trust path + bank-by-bank DCR shape + the fail-closed QSEALC
-> enforcement (`src/eidas.rs`), the ISO payment products + signing
-> baskets through the Payments public API (`src/payments.rs`), the
-> AIS/PIIS reads + funds-confirmations behind the consent chokepoint
-> (`src/ais.rs`), the honest discovery + unsupported answers
-> (`src/extended.rs`), the e2e journey (`openfin8-eu`), and the
-> published spec (28 ops, CC BY 4.0) + the OAPEC drift guard + the
-> site unit. **Remaining**: the browser-driven PSU SCA page (the
-> recipient-app story), the resolved-QSEALC-material verification (the
-> production key path over the dev fixture), and the extended
-> resource families as they ship.
+> The European open-finance adapter: the Berlin Group **openFinance
+> API Framework** (the NextGenPSD2 successor - the standard's own
+> name moved to open finance), V2 line (XS2A V2.4.x, Consent API
+> 2.2.x). Depends on: `openfin8-core`
+> (`Profile::european_union()`). Read `openfin8-uk/DESIGN.md` for
+> the sibling design; this document defines the EU deltas. **Note**:
+> the heaviest adapter of the set - three SCA interaction modes, no
+> central directory, and PSD3/FDA in flight.
 
 ## 1. Scope & Context
 
@@ -95,7 +79,7 @@ authorisation sub-resources ride their own per-approach machine
 NEW sub-resource). SCA success is never conflated with the grant:
 the consent transitions only through the observation path
 (`observe_authorisation_outcome`); the per-approach step sequences
-are adapter + Flow steps (EU-3).
+are adapter + Flow steps.
 
 **The served-approach configuration** (IMPLEMENTED):
 `OPENFIN8_EU_SCA_APPROACHES` (comma-separated; default
@@ -124,7 +108,7 @@ bulk/file pipelines.
   list (`redirect` mandatory). Per-env overrides via
   `sys.services.config`.
 
-## 6. Spec Publication (OBARCH-2)
+## 6. Spec Publication
 
 **Vendored with attribution**: the Berlin Group OpenAPI files are
 published under **CC BY 4.0** (the licence notice explicitly
