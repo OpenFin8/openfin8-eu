@@ -1,7 +1,7 @@
 # openfin8-eu - Detailed Design Document
 
-> Status: **IN IMPLEMENTATION** - the European open-finance adapter
-> (OBARCH-7). The Berlin Group **openFinance API Framework** (the
+> Status: **IMPLEMENTED (first full pass)** - the European open-finance
+> adapter (OBARCH-7). The Berlin Group **openFinance API Framework** (the
 > NextGenPSD2 successor - the standard's own name moved to open
 > finance), V2 line (XS2A V2.4.x, Consent API 2.2.x). Depends on:
 > `openfin8-core` (OBARCH-1; `Profile::european_union()` on tag
@@ -10,16 +10,20 @@
 > adapter of the set - three SCA interaction modes, no central
 > directory, and PSD3/FDA in flight.
 >
-> **Landed (backlog EU-1/EU-2)**: the XS2A consent + authorisation
-> model - the four-state consent machine + the authorisation
-> sub-resources + the pre-step over the schema `openfin8_eu`
-> (`src/consent.rs`, `sql/init.sql`, the Consent API routes in
-> `src/router.rs`, the full registration fragment, the EU-only
-> published spec). **Open**: the SCA ceremony step sequences (EU-3),
-> the eIDAS/DCR trust path (EU-4), PIS + signing baskets through
-> Payments (EU-5), the AIS/PIIS resource surfaces (EU-6), the
-> Extended Services (EU-7), the e2e journey (EU-8), the vendored
-> openFinance paths + site unit (EU-9).
+> **Landed (backlog EU-1..EU-9)**: the full XS2A surface - the consent
+> + authorisation model (`src/consent.rs`), the three SCA ceremonies
+> + the Flow step-handler profile (`src/ceremony.rs`), the eIDAS
+> trust path + bank-by-bank DCR shape + the fail-closed QSEALC
+> enforcement (`src/eidas.rs`), the ISO payment products + signing
+> baskets through the Payments public API (`src/payments.rs`), the
+> AIS/PIIS reads + funds-confirmations behind the consent chokepoint
+> (`src/ais.rs`), the honest discovery + unsupported answers
+> (`src/extended.rs`), the e2e journey (`openfin8-eu`), and the
+> published spec (28 ops, CC BY 4.0) + the OAPEC drift guard + the
+> site unit. **Remaining**: the browser-driven PSU SCA page (the
+> recipient-app story), the resolved-QSEALC-material verification (the
+> production key path over the dev fixture), and the extended
+> resource families as they ship.
 
 ## 1. Scope & Context
 

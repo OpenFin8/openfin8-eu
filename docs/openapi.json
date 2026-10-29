@@ -10,6 +10,111 @@
     "version": "0.1.0"
   },
   "paths": {
+    "/v1/ais/consents/{consentId}/accounts": {
+      "get": {
+        "tags": [
+          "ais"
+        ],
+        "summary": "`GET /v1/ais/consents/{id}/accounts` - the accounts list behind an\nAIS consent (the chokepoint + the Ledger proxy).",
+        "operationId": "get_accounts",
+        "responses": {
+          "200": {
+            "description": "Accounts list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountsPassthrough"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The consent chokepoint rejected the read"
+          },
+          "404": {
+            "description": "Unknown consent"
+          },
+          "503": {
+            "description": "Ledger proxy transport absent"
+          }
+        },
+        "security": []
+      }
+    },
+    "/v1/ais/consents/{consentId}/accounts/{accountId}/balances": {
+      "get": {
+        "tags": [
+          "ais"
+        ],
+        "summary": "`GET /v1/ais/consents/{id}/accounts/{accountId}/balances` - the\nbalances read behind an AIS consent.",
+        "operationId": "get_balances",
+        "responses": {
+          "200": {
+            "description": "Balances",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountsPassthrough"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The consent chokepoint rejected the read"
+          },
+          "503": {
+            "description": "Ledger proxy transport absent"
+          }
+        },
+        "security": []
+      }
+    },
+    "/v1/ais/consents/{consentId}/accounts/{accountId}/transactions": {
+      "get": {
+        "tags": [
+          "ais"
+        ],
+        "summary": "`GET /v1/ais/consents/{id}/accounts/{accountId}/transactions` - the\ntransactions read behind an AIS consent (the lookback window the\nconsent pins is applied ledger-side; the chokepoint enforced it).",
+        "operationId": "get_transactions",
+        "responses": {
+          "200": {
+            "description": "Transactions",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountsPassthrough"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The consent chokepoint rejected the read"
+          },
+          "503": {
+            "description": "Ledger proxy transport absent"
+          }
+        },
+        "security": []
+      }
+    },
+    "/v1/ais/consents/{consentId}/card-accounts": {
+      "get": {
+        "tags": [
+          "ais"
+        ],
+        "summary": "`GET /v1/ais/consents/{id}/card-accounts` - the card-accounts read\nbehind an AIS consent (out-of-scope data families return the XS2A\nunsupported response, never stubbed data - the honest answer until\nthe card-account resource ships).",
+        "operationId": "get_card_accounts",
+        "responses": {
+          "403": {
+            "description": "The consent chokepoint rejected the read"
+          },
+          "501": {
+            "description": "The card-account resource is not served by this deployment"
+          }
+        },
+        "security": []
+      }
+    },
     "/v1/consents": {
       "post": {
         "tags": [
@@ -158,6 +263,200 @@
         "security": []
       }
     },
+    "/v1/consents/{id}/authorisations/{authorisationId}/callback": {
+      "post": {
+        "tags": [
+          "sca"
+        ],
+        "summary": "`POST /v1/consents/{id}/authorisations/{authorisationId}/callback` -\nthe redirect-SCA callback: the PSU returned from the ASPSP's SCA page\nwith the ceremony outcome.",
+        "operationId": "redirect_callback",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RedirectCallbackRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Ceremony outcome observed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConsentStatusResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Unknown outcome / not a redirect ceremony"
+          },
+          "404": {
+            "description": "Unknown authorisation"
+          },
+          "409": {
+            "description": "Illegal state transition"
+          }
+        },
+        "security": []
+      }
+    },
+    "/v1/consents/{id}/authorisations/{authorisationId}/decoupled": {
+      "post": {
+        "tags": [
+          "sca"
+        ],
+        "summary": "`POST /v1/consents/{id}/authorisations/{authId}/decoupled` - push the\nSCA request to the PSU's device/app (out-of-band) + return the poll\ndocument.",
+        "operationId": "start_decoupled",
+        "responses": {
+          "200": {
+            "description": "Decoupled ceremony started",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecoupledStatusResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Not a decoupled ceremony"
+          },
+          "404": {
+            "description": "Unknown authorisation"
+          }
+        },
+        "security": []
+      }
+    },
+    "/v1/consents/{id}/authorisations/{authorisationId}/embedded": {
+      "post": {
+        "tags": [
+          "sca"
+        ],
+        "summary": "`POST /v1/consents/{id}/authorisations/{authId}/embedded` - serve the\nembedded-SCA challenge through the TPP's frontend (conditional per the\nRTS exemption rules; only served where the deployment allows).",
+        "operationId": "start_embedded",
+        "responses": {
+          "200": {
+            "description": "Embedded challenge served",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmbeddedChallengeResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Not an embedded ceremony / not served"
+          },
+          "404": {
+            "description": "Unknown authorisation"
+          }
+        },
+        "security": []
+      }
+    },
+    "/v1/consents/{id}/authorisations/{authorisationId}/embedded/answer": {
+      "post": {
+        "tags": [
+          "sca"
+        ],
+        "summary": "`POST /v1/consents/{id}/authorisations/{authId}/embedded/answer` - the\nPSU's answer to the embedded challenge (through the TPP's frontend).",
+        "operationId": "answer_embedded",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EmbeddedAnswerRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Answer observed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConsentStatusResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Not an embedded ceremony"
+          },
+          "404": {
+            "description": "Unknown authorisation"
+          },
+          "409": {
+            "description": "Illegal state transition"
+          }
+        },
+        "security": []
+      }
+    },
+    "/v1/consents/{id}/authorisations/{authorisationId}/redirect": {
+      "post": {
+        "tags": [
+          "sca"
+        ],
+        "summary": "`POST /v1/consents/{id}/authorisations/{authId}/redirect` - serve the\nredirect-SCA start (the PSU is redirected to the ASPSP's SCA page).",
+        "operationId": "start_redirect",
+        "responses": {
+          "200": {
+            "description": "Redirect ceremony started",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RedirectStartResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The ceremony is not a redirect ceremony"
+          },
+          "404": {
+            "description": "Unknown authorisation"
+          },
+          "409": {
+            "description": "Illegal state transition"
+          }
+        },
+        "security": []
+      }
+    },
+    "/v1/consents/{id}/authorisations/{authorisationId}/status": {
+      "get": {
+        "tags": [
+          "sca"
+        ],
+        "summary": "`GET /v1/consents/{id}/authorisations/{authId}` - the decoupled-SCA\npoll (the TPP polls this until the out-of-band ceremony completes);\nan `expired` ceremony window is observed here (the honest poll answer).",
+        "operationId": "poll_decoupled",
+        "responses": {
+          "200": {
+            "description": "Ceremony status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecoupledStatusResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown authorisation"
+          }
+        },
+        "security": []
+      }
+    },
     "/v1/consents/{id}/status": {
       "get": {
         "tags": [
@@ -181,10 +480,344 @@
         },
         "security": []
       }
+    },
+    "/v1/discovery": {
+      "get": {
+        "tags": [
+          "extended"
+        ],
+        "summary": "`GET /v1/discovery` - the served-surface advertisement (the honest\nper-environment list: the SCA approaches, the payment products, the\nextended services).",
+        "operationId": "discovery",
+        "responses": {
+          "200": {
+            "description": "Discovery document",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DiscoveryResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": []
+      }
+    },
+    "/v1/documents/{documentId}": {
+      "get": {
+        "tags": [
+          "extended"
+        ],
+        "summary": "`GET /v1/documents/{documentId}` - document download. The Extended\nServices documents surface: rides Sentin8:Storage signed URLs (the\nCA statement-download precedent) once the document resource family\nships; the honest unsupported answer until then.",
+        "operationId": "download_document",
+        "responses": {
+          "501": {
+            "description": "The document resource family is not served",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnsupportedResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": []
+      }
+    },
+    "/v1/internal/steps/execute": {
+      "post": {
+        "tags": [
+          "sca"
+        ],
+        "summary": "`POST /v1/internal/steps/execute` - the Flow proxy-back lane.",
+        "operationId": "execute_step_handler",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProxyBackRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Step executed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProxyBackResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": []
+      }
+    },
+    "/v1/mandates": {
+      "get": {
+        "tags": [
+          "extended"
+        ],
+        "summary": "`GET /v1/mandates` - the mandate (recurring-payment authorization)\nlist. Out-of-scope until the mandate resource family ships: the\nhonest unsupported response, never stubbed data.",
+        "operationId": "list_mandates",
+        "responses": {
+          "501": {
+            "description": "The mandate resource family is not served",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnsupportedResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": []
+      }
+    },
+    "/v1/payments/{paymentProduct}": {
+      "post": {
+        "tags": [
+          "payments"
+        ],
+        "summary": "`POST /v1/payments/{paymentProduct}` - payment initiation: verify the\nQSEALC signature (EU invariant 1, fail-closed), then proxy to\nBank8:Payments through the public API (the OBVERT boundary).",
+        "operationId": "create_payment",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreatePaymentRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Payment initiated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Unknown payment product"
+          },
+          "401": {
+            "description": "Not authenticated"
+          },
+          "403": {
+            "description": "QSEALC verification failed (fail-closed)"
+          },
+          "503": {
+            "description": "Payments proxy transport absent"
+          }
+        },
+        "security": []
+      }
+    },
+    "/v1/payments/{paymentProduct}/{paymentId}": {
+      "get": {
+        "tags": [
+          "payments"
+        ],
+        "summary": "`GET /v1/payments/{paymentProduct}/{paymentId}` - payment status read\n(the PIS status resource; proxied to Payments).",
+        "operationId": "get_payment_status",
+        "responses": {
+          "200": {
+            "description": "Payment status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaymentResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Unknown payment product"
+          },
+          "503": {
+            "description": "Payments proxy transport absent"
+          }
+        },
+        "security": []
+      },
+      "delete": {
+        "tags": [
+          "payments"
+        ],
+        "summary": "`DELETE /v1/payments/{paymentProduct}/{paymentId}` - payment\ncancellation (proxied to Payments; the PIS cancellation resource).",
+        "operationId": "cancel_payment",
+        "responses": {
+          "204": {
+            "description": "Payment cancelled"
+          },
+          "400": {
+            "description": "Unknown payment product"
+          },
+          "503": {
+            "description": "Payments proxy transport absent"
+          }
+        },
+        "security": []
+      }
+    },
+    "/v1/piis/consents/{consentId}/funds-confirmations": {
+      "post": {
+        "tags": [
+          "piis"
+        ],
+        "summary": "`POST /v1/piis/consents/{id}/funds-confirmations` - the\nconfirmation-of-funds check behind a PIIS consent.",
+        "operationId": "confirm_funds",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FundsConfirmationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Funds confirmation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FundsConfirmationResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The consent chokepoint rejected the check"
+          },
+          "503": {
+            "description": "Ledger proxy transport absent"
+          }
+        },
+        "security": []
+      }
+    },
+    "/v1/push-ais": {
+      "get": {
+        "tags": [
+          "extended"
+        ],
+        "summary": "`GET /v1/push-ais` - the push-AIS (consent-less account\npresentation) list. Out-of-scope until the push-AIS resource family\nships.",
+        "operationId": "list_push_ais",
+        "responses": {
+          "501": {
+            "description": "The push-AIS resource family is not served",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnsupportedResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": []
+      }
+    },
+    "/v1/request-to-pay": {
+      "get": {
+        "tags": [
+          "extended"
+        ],
+        "summary": "`GET /v1/request-to-pay` - the RTP (request-to-pay) list. Out-of-scope\nuntil the RTP resource family ships.",
+        "operationId": "list_request_to_pay",
+        "responses": {
+          "501": {
+            "description": "The RTP resource family is not served",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnsupportedResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": []
+      }
+    },
+    "/v1/signing-baskets": {
+      "post": {
+        "tags": [
+          "payments"
+        ],
+        "summary": "`POST /v1/signing-baskets` - create a basket: batch consents +\npayments into ONE PSU authorization ceremony.",
+        "operationId": "create_basket",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateBasketRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Basket created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BasketResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Empty basket"
+          }
+        },
+        "security": []
+      }
+    },
+    "/v1/signing-baskets/{basketId}": {
+      "get": {
+        "tags": [
+          "payments"
+        ],
+        "summary": "`GET /v1/signing-baskets/{basketId}` - read a basket.",
+        "operationId": "get_basket",
+        "responses": {
+          "200": {
+            "description": "Basket detail",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BasketResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown basket"
+          }
+        },
+        "security": []
+      }
     }
   },
   "components": {
     "schemas": {
+      "AccountsPassthrough": {
+        "description": "The AIS accounts list (the forwarded Ledger document, CSDF-minimized\nby the ledger-side scope projection; genuinely freeform envelope)."
+      },
       "AuthorisationListResponse": {
         "type": "object",
         "description": "`GET /v1/consents/{id}/authorisations` - list the consent's\nauthorisation sub-resources (the TPP polls these under decoupled SCA).",
@@ -257,6 +890,48 @@
           "status": {
             "type": "string",
             "description": "The per-approach authorisation status."
+          }
+        }
+      },
+      "BasketResponse": {
+        "type": "object",
+        "description": "The signing-basket document.",
+        "required": [
+          "basketId",
+          "status",
+          "consentIds",
+          "paymentIds",
+          "createdAt"
+        ],
+        "properties": {
+          "basketId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The basket id."
+          },
+          "consentIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "The batched consents."
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Creation timestamp."
+          },
+          "paymentIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The batched payments."
+          },
+          "status": {
+            "type": "string",
+            "description": "The basket's own XS2A state (received | valid | rejected | expired)."
           }
         }
       },
@@ -347,6 +1022,35 @@
           }
         }
       },
+      "CreateBasketRequest": {
+        "type": "object",
+        "description": "The signing-basket creation request.",
+        "required": [
+          "customerId"
+        ],
+        "properties": {
+          "consent_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "The consent ids batched into this basket."
+          },
+          "customerId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The PSU the basket's ceremony authorizes."
+          },
+          "payment_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The payment ids batched into this basket (payments created by\n`POST /v1/payments/{product}` - opaque handles here)."
+          }
+        }
+      },
       "CreateConsentRequest": {
         "type": "object",
         "description": "`POST /v1/consents` request - the XS2A consent creation.",
@@ -404,6 +1108,306 @@
           }
         }
       },
+      "CreatePaymentRequest": {
+        "type": "object",
+        "description": "`POST /v1/payments/{paymentProduct}` - the ISO payment product\ninitiation request (SEPA credit transfer, instant, cross-border,\nbulk - the product name is the path segment; XS2A JSON + the ISO\n20022-derived payload).",
+        "required": [
+          "customerId",
+          "debtorAccount",
+          "instructedPayment"
+        ],
+        "properties": {
+          "customerId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The PSU (bank customer) the payment debits."
+          },
+          "debtorAccount": {
+            "type": "string",
+            "description": "The debtor account (opaque handle at the ASPSP)."
+          },
+          "instructedPayment": {
+            "description": "The payment body (the ISO 20022-derived document - genuinely\nfreeform: the product family defines the fields)."
+          },
+          "signature": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The QSEALC signature over the canonical body (EU invariant 1)."
+          }
+        }
+      },
+      "DecoupledStatusResponse": {
+        "type": "object",
+        "description": "The decoupled-SCA poll response: the ceremony status right now.",
+        "required": [
+          "authorisationId",
+          "status",
+          "approach"
+        ],
+        "properties": {
+          "approach": {
+            "type": "string",
+            "description": "The SCA approach (`decoupled`)."
+          },
+          "authorisationId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The authorisation sub-resource id."
+          },
+          "status": {
+            "type": "string",
+            "description": "The per-approach ceremony status."
+          }
+        }
+      },
+      "DiscoveryResponse": {
+        "type": "object",
+        "description": "The discovery document: the deployment's served-surface advertisement\n(the XS2A discovery response - the honest per-environment list).",
+        "required": [
+          "ofVersion",
+          "scaApproaches",
+          "paymentProducts",
+          "extensions"
+        ],
+        "properties": {
+          "extensions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The Extended Services this deployment serves."
+          },
+          "ofVersion": {
+            "type": "string",
+            "description": "The Berlin Group openFinance version this ASPSP serves."
+          },
+          "paymentProducts": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The served ISO payment products."
+          },
+          "scaApproaches": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The served SCA approaches (redirect always present)."
+          }
+        }
+      },
+      "EmbeddedAnswerRequest": {
+        "type": "object",
+        "description": "The embedded-SCA challenge answer.",
+        "required": [
+          "answer"
+        ],
+        "properties": {
+          "answer": {
+            "type": "string",
+            "description": "The PSU's answer to the challenge."
+          }
+        }
+      },
+      "EmbeddedChallengeResponse": {
+        "type": "object",
+        "description": "The embedded-SCA challenge document (the TPP's frontend renders it).",
+        "required": [
+          "authorisationId",
+          "challenge",
+          "status",
+          "approach"
+        ],
+        "properties": {
+          "approach": {
+            "type": "string",
+            "description": "The SCA approach (`embedded`)."
+          },
+          "authorisationId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The authorisation sub-resource id."
+          },
+          "challenge": {
+            "type": "string",
+            "description": "The challenge data (opaque to the TPP - rendered, never parsed)."
+          },
+          "status": {
+            "type": "string",
+            "description": "The ceremony status (`sca_started`)."
+          }
+        }
+      },
+      "FundsConfirmationRequest": {
+        "type": "object",
+        "description": "The PIIS funds-confirmation request.",
+        "required": [
+          "consentId",
+          "accountId",
+          "amount"
+        ],
+        "properties": {
+          "accountId": {
+            "type": "string",
+            "description": "The account to check (opaque handle at the ASPSP)."
+          },
+          "amount": {
+            "description": "The amount to confirm (the ISO 20022 amount document)."
+          },
+          "consentId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The consent id (the PIIS consent)."
+          }
+        }
+      },
+      "FundsConfirmationResponse": {
+        "type": "object",
+        "description": "The PIIS funds-confirmation response.",
+        "required": [
+          "consentId",
+          "fundsAvailable"
+        ],
+        "properties": {
+          "consentId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The consent id."
+          },
+          "fundsAvailable": {
+            "type": "boolean",
+            "description": "`fundsAvailable` - the XS2A boolean answer."
+          }
+        }
+      },
+      "PaymentResponse": {
+        "type": "object",
+        "description": "The payment initiation response.",
+        "required": [
+          "paymentId",
+          "transactionStatus",
+          "paymentsService"
+        ],
+        "properties": {
+          "paymentId": {
+            "type": "string",
+            "description": "The payment id (as assigned by Payments)."
+          },
+          "paymentsService": {
+            "description": "The forwarded Payments document (genuinely freeform)."
+          },
+          "transactionStatus": {
+            "type": "string",
+            "description": "The transaction status (the ISO transaction-status vocabulary)."
+          }
+        }
+      },
+      "ProxyBackRequest": {
+        "type": "object",
+        "description": "The proxy-back request (the kernel contract shape).",
+        "required": [
+          "step_kind",
+          "input"
+        ],
+        "properties": {
+          "input": {},
+          "step_config": {},
+          "step_kind": {
+            "type": "string"
+          },
+          "step_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "user_data": {},
+          "workflow_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          }
+        }
+      },
+      "ProxyBackResponse": {
+        "type": "object",
+        "description": "The proxy-back response (the kernel contract shape).",
+        "required": [
+          "status"
+        ],
+        "properties": {
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "output": {},
+          "status": {
+            "type": "string"
+          }
+        }
+      },
+      "RedirectCallbackRequest": {
+        "type": "object",
+        "description": "The redirect callback query parameters (XS2A redirect: the PSU returns\nwith the ceremony outcome).",
+        "required": [
+          "authorisationId",
+          "outcome"
+        ],
+        "properties": {
+          "authorisationId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The authorisation id the start response carried."
+          },
+          "outcome": {
+            "type": "string",
+            "description": "`sca_finalised` (the PSU completed SCA) | `psu_denied` (the PSU\nexplicitly denied) | `sca_failed` (the challenge failed)."
+          },
+          "psuId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The PSU identity once identified (the bank customer's sub)."
+          }
+        }
+      },
+      "RedirectStartResponse": {
+        "type": "object",
+        "description": "The redirect-SCA start response: the ASPSP SCA page URL + the\nauthorisation id the callback carries back.",
+        "required": [
+          "authorisationId",
+          "redirectUrl",
+          "status",
+          "approach"
+        ],
+        "properties": {
+          "approach": {
+            "type": "string",
+            "description": "The SCA approach (`redirect`)."
+          },
+          "authorisationId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The authorisation sub-resource id (echoed by the callback)."
+          },
+          "redirectUrl": {
+            "type": "string",
+            "description": "The ASPSP SCA page the PSU is redirected to."
+          },
+          "status": {
+            "type": "string",
+            "description": "The ceremony status (`sca_started` once the redirect is served)."
+          }
+        }
+      },
       "StartAuthorisationRequest": {
         "type": "object",
         "description": "The pre-step request: `POST /v1/consents/{id}/authorisations` -\nstart an authorisation sub-resource (optionally selecting the SCA\napproach BEFORE the PSU ceremony begins - EU DESIGN.md §3 ceremony 4).",
@@ -414,6 +1418,24 @@
               "null"
             ],
             "description": "The SCA approach for this ceremony (defaults to the mandatory\n`redirect`)."
+          }
+        }
+      },
+      "UnsupportedResponse": {
+        "type": "object",
+        "description": "An out-of-scope data-family document (the honest unsupported answer).",
+        "required": [
+          "resource",
+          "reason"
+        ],
+        "properties": {
+          "reason": {
+            "type": "string",
+            "description": "The honest statement (never stubbed data)."
+          },
+          "resource": {
+            "type": "string",
+            "description": "The unserved resource family."
           }
         }
       }

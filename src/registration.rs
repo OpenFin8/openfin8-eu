@@ -69,6 +69,24 @@ const M2M_GRANTS: &[M2mGrant] = &[
         workload: "openfin8-eu-sys",
         scopes: &["sentin8:sys:tenants:read"],
     },
+    // CERTFREE-8V: the eu→ledger proxy workload - the AIS account,
+    // balance, and transaction reads the XS2A surface proxies (OBVERT:
+    // public API only; the ledger side's scope-mirror policy set admits
+    // these scopes).
+    M2mGrant {
+        workload: "openfin8-eu-ledger",
+        scopes: &["bank8:ledger:accounts:read", "bank8:ledger:postings:read"],
+    },
+    // CERTFREE-8V: the eu→payments proxy workload - the ISO payment
+    // products (initiation, status, cancellation) through the Payments
+    // public API.
+    M2mGrant {
+        workload: "openfin8-eu-payments",
+        scopes: &[
+            "bank8:payments:payments:read",
+            "bank8:payments:payments:write",
+        ],
+    },
     // TLS-RLS-4: the database-free HostContextResolver's resolve workload.
     M2mGrant {
         workload: "openfin8-eu-tls",

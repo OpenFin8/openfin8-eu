@@ -112,13 +112,27 @@ The kernel + platform set, plus: **eIDAS QWAC/QSEALC certificates**
 - The skeleton builds + the publication guard passes (vendored with
   CC BY attribution) - **current state**.
 - The XS2A consent + authorisation model over the kernel lands (the
-  four-state consent machine + the pre-step) - **LANDED (EU-2)**:
-  `src/consent.rs` + the `openfin8_eu` schema + the Consent API
-  routes; the state machines are pure + unit-tested.
+  four-state consent machine + the pre-step) - **LANDED (EU-2)**.
 - All three SCA approach ceremonies green against Auth (redirect
-  mandatory; decoupled + embedded conditional) - **open (EU-3)**:
-  the served-list validation + the pre-step approach selection are
-  in; the per-approach Flow step sequences land with EU-3.
+  mandatory; decoupled + embedded conditional) - **LANDED (EU-3)**:
+  the three ceremony routes over the per-approach machine + the Flow
+  step-handler profile; the Auth ceremony drive rides the recipient-app
+  story (the browser-driven PSU page).
+- The signing-basket batch flow + the ISO payment products through
+  Payments - **LANDED (EU-5)**: the batch authorization + the four ISO
+  products through the Payments public API, behind the fail-closed
+  QSEALC verification (EU invariant 1).
+- The e2e journey gains the redirect-SCA AIS + PIS flows - **LANDED
+  (EU-8)**: `openfin8_eu_xs2a_journey.spec.ts` (the discovery contract,
+  the redirect ceremony to VALID, the failed-challenge isolation, the
+  QSEALC fail-closed verdict, the honest 501s).
+- AIS + PIIS behind the consent chokepoint - **LANDED (EU-6)**; the
+  Extended Services answer honestly until their resource families ship
+  (**EU-7**: discovery served; mandates/RTP/push-AIS/documents 501,
+  never stubbed data); the eIDAS trust path is secret-referenced +
+  bank-by-bank DCR-shaped (**EU-4**; the resolved-key verification is
+  the production material story); the published spec + site unit +
+  drift guard landed (**EU-9**).
 - The signing-basket batch flow + the ISO payment products through
   Payments.
 - The e2e journey gains the redirect-SCA AIS + PIS flows.

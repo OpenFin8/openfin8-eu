@@ -36,6 +36,8 @@ use utoipa::ToSchema;
 use uuid::Uuid;
 
 use openfin8_core::profile::Profile;
+use sentin8::auth::client::AuthContext;
+use sentin8::shield::{EvalTarget, PolicyEngine};
 
 // ── The state machines (pure, unit-tested) ─────────────────────────────
 
@@ -97,29 +99,19 @@ pub fn authorisation_transition(from: &str, event: &str) -> Option<String> {
         (AUTH_RECEIVED | AUTH_PSU_IDENTIFIED, "psu_authenticated") => {
             Some(AUTH_PSU_AUTHENTICATED.to_string())
         }
+        (AUTH_RECEIVED | AUTH_PSU_IDENTIFIED | AUTH_PSU_AUTHENTICATED, "sca_started") => {
+            Some(AUTH_SCA_STARTED.to_string())
+        }
         (
-            AUTH_RECEIVED | AUTH_PSU_IDENTIFIED | AUTH_PSU_AUTHENTICATED,
-            "sca_started",
-        ) => Some(AUTH_SCA_STARTED.to_string()),
-        (
-            AUTH_RECEIVED
-            | AUTH_PSU_IDENTIFIED
-            | AUTH_PSU_AUTHENTICATED
-            | AUTH_SCA_STARTED,
+            AUTH_RECEIVED | AUTH_PSU_IDENTIFIED | AUTH_PSU_AUTHENTICATED | AUTH_SCA_STARTED,
             "sca_finalised",
         ) => Some(AUTH_FINALISED.to_string()),
         (
-            AUTH_RECEIVED
-            | AUTH_PSU_IDENTIFIED
-            | AUTH_PSU_AUTHENTICATED
-            | AUTH_SCA_STARTED,
+            AUTH_RECEIVED | AUTH_PSU_IDENTIFIED | AUTH_PSU_AUTHENTICATED | AUTH_SCA_STARTED,
             "sca_failed",
         ) => Some(AUTH_FAILED.to_string()),
         (
-            AUTH_RECEIVED
-            | AUTH_PSU_IDENTIFIED
-            | AUTH_PSU_AUTHENTICATED
-            | AUTH_SCA_STARTED,
+            AUTH_RECEIVED | AUTH_PSU_IDENTIFIED | AUTH_PSU_AUTHENTICATED | AUTH_SCA_STARTED,
             "expired",
         ) => Some(AUTH_EXPIRED.to_string()),
         _ => None,
@@ -257,22 +249,58 @@ pub struct AuthorisationResponse {
 // ── The AppState ───────────────────────────────────────────────────────
 
 /// The EU adapter's application state: the kernel profile + the pool +
-/// the served SCA approach list (honest per-environment configuration,
-/// EU DESIGN.md §5).
+/// the Shield engine + the auth client (the real gate - steps 1-5) + the
+/// proxy-lane transports (EU-5/EU-6) + the served SCA approach list
+/// (honest per-environment configuration, EU DESIGN.md §5).
 #[derive(Clone)]
 pub struct AppState {
     pub pool: sqlx::PgPool,
     pub profile: Profile,
+    /// The shell-booted policy engine (step 5 - the ONLY gate); the
+    /// shell hands every service the same Arc (the engine is the
+    /// process-wide instance).
+    pub policy: std::sync::Arc<PolicyEngine>,
+    /// The shared auth client (steps 1-4: discovery + JWKS caches).
+    pub auth_client: sentin8::auth::client::Client,
+    /// The platform issuer (bearer verification).
+    pub auth_issuer: String,
+    /// The Ledger proxy transport (workload `openfin8-eu-ledger`;
+    /// None until the boot mint - the proxy lanes 503 loudly).
+    pub ledger_http: Option<reqwest::Client>,
+    /// The Ledger base URL.
+    pub ledger_url: String,
+    /// The Payments proxy transport (workload `openfin8-eu-payments`).
+    pub payments_http: Option<reqwest::Client>,
+    /// The Payments base URL.
+    pub payments_url: String,
+    /// The eIDAS configuration state: true when all four QSEALC/QWAC
+    /// secret references are configured (EU-4; PIS fails closed when
+    /// absent - `eids_configured`).
+    pub eidas_configured: bool,
+    /// The served openFinance version (from the profile).
+    pub of_version: String,
     /// The served SCA approaches (redirect always present).
     pub served_approaches: Vec<String>,
+    /// The request-scoped env id (resolved at the gate; the RLS context
+    /// stamp uses it).
+    env_id_cell: std::sync::Arc<std::sync::OnceLock<uuid::Uuid>>,
 }
 
 impl AppState {
-    /// Build the state; the served-approach list comes from
-    /// `OPENFIN8_EU_SCA_APPROACHES` (comma-separated; default
-    /// `redirect` - the conservative start per EU DESIGN.md §8's
-    /// embedded-SCA decision: decoupled + embedded are opt-in).
-    pub fn from_env(pool: PgPool, profile: Profile) -> Self {
+    /// Build the state from the shell core + the boot-built lanes; the
+    /// served-approach list comes from `OPENFIN8_EU_SCA_APPROACHES`
+    /// (comma-separated; default `redirect` - the conservative start
+    /// per EU DESIGN.md §8's embedded-SCA decision: decoupled +
+    /// embedded are opt-in).
+    pub fn from_core(
+        core: sentin8::shell::ServiceCore,
+        profile: Profile,
+        ledger_http: Option<reqwest::Client>,
+        ledger_url: String,
+        payments_http: Option<reqwest::Client>,
+        payments_url: String,
+        eidas_configured: bool,
+    ) -> Self {
         let raw = profile
             .env("SCA_APPROACHES")
             .unwrap_or_else(|| SCA_APPROACH_REDIRECT.to_string());
@@ -293,15 +321,76 @@ impl AppState {
         }
         let refs: Vec<&str> = served.iter().map(String::as_str).collect();
         if let Err(e) = validate_served_approaches(&refs) {
-            tracing::warn!("served SCA approach list invalid ({e}) - falling back to redirect-only");
+            tracing::warn!(
+                "served SCA approach list invalid ({e}) - falling back to redirect-only"
+            );
             served = vec![SCA_APPROACH_REDIRECT.to_string()];
         }
         Self {
-            pool,
-            profile,
+            pool: core.pool.clone(),
+            policy: core.admin.policy.clone(),
+            auth_client: core.config.sentin8_auth_client.clone(),
+            auth_issuer: core.config.sentin8_auth_issuer.clone(),
+            ledger_http,
+            ledger_url,
+            payments_http,
+            payments_url,
+            eidas_configured,
+            of_version: profile.fdx_version.clone(),
             served_approaches: served,
+            env_id_cell: std::sync::Arc::new(std::sync::OnceLock::new()),
+            profile,
         }
     }
+
+    /// The eIDAS configuration state (PIS fails closed when false).
+    pub fn eids_configured(&self) -> bool {
+        self.eidas_configured
+    }
+
+    /// The Ledger proxy transport (None until the boot mint - the proxy
+    /// lanes 503 loudly, never degrading to an unauthenticated call).
+    pub fn ledger_http(&self) -> Option<&reqwest::Client> {
+        self.ledger_http.as_ref()
+    }
+
+    /// The Payments proxy transport.
+    pub fn payments_http(&self) -> Option<&reqwest::Client> {
+        self.payments_http.as_ref()
+    }
+
+    /// The request-scoped env id (the Shield gate resolves the caller's
+    /// env; the handlers' RLS context stamp reads it). Resolved once
+    /// per state value (the shell hands each request a cloned state).
+    pub fn env_id(&self) -> Uuid {
+        *self.env_id_cell.get_or_init(Uuid::nil)
+    }
+
+    /// The Shield gate (the full contract - steps 1-5): verify the
+    /// bearer (steps 1-4) + evaluate the action (step 5, the ONLY
+    /// authorization decision; an enforced deny → 403).
+    pub async fn authorize(
+        &self,
+        headers: &axum::http::HeaderMap,
+        resource_action: &str,
+    ) -> Result<AuthContext, (StatusCode, String)> {
+        let a = sentin8::auth::client::verify_bearer_token(&self.auth_client, headers).await?;
+        let target = EvalTarget::new(format!("{}:{}", self.profile.service_type, resource_action));
+        sentin8::shield::runtime::require_policy(&self.policy, &a, headers, target).await?;
+        let _ = self.env_id_cell.set(a.env_id());
+        stamp_env_id(a.env_id());
+        Ok(a)
+    }
+}
+
+/// The Shield gate for the resource modules (ais/payments/ceremony):
+/// verify + evaluate, returning the auth context or the 401/403.
+pub async fn authorize(
+    state: &AppState,
+    headers: &axum::http::HeaderMap,
+    resource_action: &str,
+) -> Result<AuthContext, (StatusCode, String)> {
+    state.authorize(headers, resource_action).await
 }
 
 // ── The emit path (the outbox contract, same-tx as the domain change) ──
@@ -319,11 +408,27 @@ async fn set_tenant_context(conn: &mut sqlx::PgConnection, env_id: Uuid) {
     .await;
 }
 
+/// The pub re-export the resource modules (payments/ais/ceremony) use -
+/// the same transaction-local contract.
+pub async fn set_tenant_context_pub(conn: &mut sqlx::PgConnection, env_id: Uuid) {
+    set_tenant_context(conn, env_id).await
+}
+
 /// Emit a bus event through the local outbox ON THE DOMAIN TRANSACTION
 /// (the platform contract: `insert_outbox_row` in the SAME transaction as
 /// the domain change - outbox-first, commits atomically). Stream family
 /// `openfin8-eu`; event grammar `openfin8:eu:*`.
 async fn emit_event(
+    conn: &mut sqlx::PgConnection,
+    env_id: Uuid,
+    resource_operation: &str,
+    payload: serde_json::Value,
+) -> Result<(), sqlx::Error> {
+    emit_event_pub(conn, env_id, resource_operation, payload).await
+}
+
+/// The pub re-export the resource modules use.
+pub async fn emit_event_pub(
     conn: &mut sqlx::PgConnection,
     env_id: Uuid,
     resource_operation: &str,
@@ -340,7 +445,7 @@ async fn emit_event(
     .map(|_| ())
     .map_err(|e| match e {
         sentin8::bus::outbox::OutboxError::Db(db) => db,
-        other => sqlx::Error::Protocol(format!("outbox insert: {other}").into()),
+        other => sqlx::Error::Protocol(format!("outbox insert: {other}")),
     })
 }
 
@@ -364,10 +469,16 @@ pub async fn create_consent(
     State(state): State<AppState>,
     Json(req): Json<CreateConsentRequest>,
 ) -> Result<(StatusCode, Json<ConsentResponse>), (StatusCode, String)> {
-    if !matches!(req.service.as_str(), SERVICE_AIS | SERVICE_PIS | SERVICE_PIIS) {
+    if !matches!(
+        req.service.as_str(),
+        SERVICE_AIS | SERVICE_PIS | SERVICE_PIIS
+    ) {
         return Err((
             StatusCode::BAD_REQUEST,
-            format!("invalid service '{}' (allowed: ais, pis, piis)", req.service),
+            format!(
+                "invalid service '{}' (allowed: ais, pis, piis)",
+                req.service
+            ),
         ));
     }
     let mut tx = state
@@ -376,9 +487,9 @@ pub async fn create_consent(
         .await
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
     set_tenant_context(&mut tx, uuid_env()).await;
-    let expires_at = req.expires_in_days.map(|d| {
-        chrono::Utc::now() + chrono::Duration::days(d.min(90) as i64)
-    });
+    let expires_at = req
+        .expires_in_days
+        .map(|d| chrono::Utc::now() + chrono::Duration::days(d.min(90) as i64));
     let row = sqlx::query(
         r#"INSERT INTO openfin8_eu.consents
                (env_id, customer_id, recipient_id, status, service, scopes,
@@ -534,10 +645,11 @@ pub async fn start_authorisation(
     // The approach selection is validated against the SERVED list - the
     // honest configuration (an unserved approach is a 400, never a
     // silent fallback).
-    let approach = req.approach.unwrap_or_else(|| SCA_APPROACH_REDIRECT.to_string());
+    let approach = req
+        .approach
+        .unwrap_or_else(|| SCA_APPROACH_REDIRECT.to_string());
     let served: Vec<&str> = state.served_approaches.iter().map(String::as_str).collect();
-    validate_approach_selection(&approach, &served)
-        .map_err(|e| (StatusCode::BAD_REQUEST, e))?;
+    validate_approach_selection(&approach, &served).map_err(|e| (StatusCode::BAD_REQUEST, e))?;
     let mut tx = state
         .pool
         .begin()
@@ -546,13 +658,17 @@ pub async fn start_authorisation(
     set_tenant_context(&mut tx, uuid_env()).await;
     // The consent must exist and not be terminal (XS2A: a rejected/expired/
     // revoked consent cannot start a new ceremony).
-    let consent_status: String = sqlx::query_scalar("SELECT status FROM openfin8_eu.consents WHERE id = $1 FOR SHARE")
-        .bind(consent_id)
-        .fetch_optional(&mut *tx)
-        .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
-        .ok_or((StatusCode::NOT_FOUND, "unknown consent".to_string()))?;
-    if matches!(consent_status.as_str(), CONSENT_REJECTED | CONSENT_EXPIRED | CONSENT_REVOKED) {
+    let consent_status: String =
+        sqlx::query_scalar("SELECT status FROM openfin8_eu.consents WHERE id = $1 FOR SHARE")
+            .bind(consent_id)
+            .fetch_optional(&mut *tx)
+            .await
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+            .ok_or((StatusCode::NOT_FOUND, "unknown consent".to_string()))?;
+    if matches!(
+        consent_status.as_str(),
+        CONSENT_REJECTED | CONSENT_EXPIRED | CONSENT_REVOKED
+    ) {
         return Err((
             StatusCode::BAD_REQUEST,
             format!("consent is terminal ({consent_status}) - no new authorisation"),
@@ -714,15 +830,18 @@ pub async fn observe_authorisation_outcome(
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
     set_tenant_context(&mut tx, uuid_env()).await;
     // The authorisation's own machine transition first.
-    let auth_status: String =
-        sqlx::query_scalar("SELECT status FROM openfin8_eu.consent_authorisations WHERE id = $1 FOR UPDATE")
-            .bind(authorisation_id)
-            .fetch_optional(&mut *tx)
-            .await
-            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
-            .ok_or((StatusCode::NOT_FOUND, "unknown authorisation".to_string()))?;
-    let next_auth = authorisation_transition(&auth_status, event)
-        .ok_or((StatusCode::CONFLICT, format!("illegal authorisation transition: {auth_status} + {event}")))?;
+    let auth_status: String = sqlx::query_scalar(
+        "SELECT status FROM openfin8_eu.consent_authorisations WHERE id = $1 FOR UPDATE",
+    )
+    .bind(authorisation_id)
+    .fetch_optional(&mut *tx)
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+    .ok_or((StatusCode::NOT_FOUND, "unknown authorisation".to_string()))?;
+    let next_auth = authorisation_transition(&auth_status, event).ok_or((
+        StatusCode::CONFLICT,
+        format!("illegal authorisation transition: {auth_status} + {event}"),
+    ))?;
     sqlx::query("UPDATE openfin8_eu.consent_authorisations SET status = $2, updated_at = now() WHERE id = $1")
         .bind(authorisation_id)
         .bind(&next_auth)
@@ -746,8 +865,10 @@ pub async fn observe_authorisation_outcome(
         "psu_denied" => "psu_denied",
         _ => return Err((StatusCode::BAD_REQUEST, format!("unobserved event {event}"))),
     };
-    let next_consent = consent_transition(&consent_status, consent_event)
-        .ok_or((StatusCode::CONFLICT, format!("illegal consent transition: {consent_status} + {consent_event}")))?;
+    let next_consent = consent_transition(&consent_status, consent_event).ok_or((
+        StatusCode::CONFLICT,
+        format!("illegal consent transition: {consent_status} + {consent_event}"),
+    ))?;
     sqlx::query("UPDATE openfin8_eu.consents SET status = $2, updated_at = now() WHERE id = $1")
         .bind(consent_id)
         .bind(&next_consent)
@@ -773,16 +894,24 @@ pub async fn observe_authorisation_outcome(
     Ok(next_consent)
 }
 
-/// The env id resolved at request time (RLS context; the middleware
-/// stamps the real tenant context - this is the request-scoped
-/// resolution hook the handlers use until the full Shield gate lands
-/// with EU-3's ceremony routes).
+/// The request-scoped env id: the Shield gate's resolution (the
+/// caller's env claim - the gate ran before any handler reaches this).
+/// Falls back to nil only on the ungated paths (the RLS policies
+/// enforce env scoping regardless - a nil stamp matches nothing).
 fn uuid_env() -> Uuid {
-    // Placeholder resolution: the tenant context arrives via the Shield
-    // middleware (the same seam openfin8-core's `set_tenant_context`
-    // uses). EU-3 wires the real authz; the RLS policies enforce env
-    // scoping regardless.
-    Uuid::nil()
+    ENV_ID.with(|c| c.get())
+}
+
+thread_local! {
+    /// The request-scoped env id (the gate stamps it before the handler
+    /// runs; axum handlers run on the request's task thread).
+    static ENV_ID: std::cell::Cell<Uuid> = const { std::cell::Cell::new(Uuid::nil()) };
+}
+
+/// Stamp the request-scoped env id (the gate calls this; the handler's
+/// `uuid_env()` reads it on the same request thread).
+pub fn stamp_env_id(env_id: Uuid) {
+    ENV_ID.with(|c| c.set(env_id));
 }
 
 // ── Tests ──────────────────────────────────────────────────────────────
@@ -799,17 +928,41 @@ mod tests {
             CONSENT_VALID
         );
         // received -> rejected on the PSU's deny.
-        assert_eq!(consent_transition(CONSENT_RECEIVED, "psu_denied").unwrap(), CONSENT_REJECTED);
+        assert_eq!(
+            consent_transition(CONSENT_RECEIVED, "psu_denied").unwrap(),
+            CONSENT_REJECTED
+        );
         // received/valid -> expired.
-        assert_eq!(consent_transition(CONSENT_RECEIVED, "expired").unwrap(), CONSENT_EXPIRED);
-        assert_eq!(consent_transition(CONSENT_VALID, "expired").unwrap(), CONSENT_EXPIRED);
+        assert_eq!(
+            consent_transition(CONSENT_RECEIVED, "expired").unwrap(),
+            CONSENT_EXPIRED
+        );
+        assert_eq!(
+            consent_transition(CONSENT_VALID, "expired").unwrap(),
+            CONSENT_EXPIRED
+        );
         // revocation is terminal from any non-revoked state.
-        assert_eq!(consent_transition(CONSENT_RECEIVED, "revoke").unwrap(), CONSENT_REVOKED);
-        assert_eq!(consent_transition(CONSENT_VALID, "revoke").unwrap(), CONSENT_REVOKED);
+        assert_eq!(
+            consent_transition(CONSENT_RECEIVED, "revoke").unwrap(),
+            CONSENT_REVOKED
+        );
+        assert_eq!(
+            consent_transition(CONSENT_VALID, "revoke").unwrap(),
+            CONSENT_REVOKED
+        );
         // terminal states never leave.
-        assert_eq!(consent_transition(CONSENT_REVOKED, "authorisation_finalised"), None);
-        assert_eq!(consent_transition(CONSENT_EXPIRED, "authorisation_finalised"), None);
-        assert_eq!(consent_transition(CONSENT_REJECTED, "authorisation_finalised"), None);
+        assert_eq!(
+            consent_transition(CONSENT_REVOKED, "authorisation_finalised"),
+            None
+        );
+        assert_eq!(
+            consent_transition(CONSENT_EXPIRED, "authorisation_finalised"),
+            None
+        );
+        assert_eq!(
+            consent_transition(CONSENT_REJECTED, "authorisation_finalised"),
+            None
+        );
         // SCA success never bypasses the observation path.
         assert_eq!(consent_transition(CONSENT_RECEIVED, "sca_finalised"), None);
     }
@@ -817,21 +970,42 @@ mod tests {
     #[test]
     fn authorisation_machine_is_per_approach() {
         // the full happy path.
-        assert_eq!(authorisation_transition(AUTH_RECEIVED, "psu_identified").unwrap(), AUTH_PSU_IDENTIFIED);
+        assert_eq!(
+            authorisation_transition(AUTH_RECEIVED, "psu_identified").unwrap(),
+            AUTH_PSU_IDENTIFIED
+        );
         assert_eq!(
             authorisation_transition(AUTH_PSU_IDENTIFIED, "psu_authenticated").unwrap(),
             AUTH_PSU_AUTHENTICATED
         );
-        assert_eq!(authorisation_transition(AUTH_PSU_AUTHENTICATED, "sca_started").unwrap(), AUTH_SCA_STARTED);
-        assert_eq!(authorisation_transition(AUTH_SCA_STARTED, "sca_finalised").unwrap(), AUTH_FINALISED);
+        assert_eq!(
+            authorisation_transition(AUTH_PSU_AUTHENTICATED, "sca_started").unwrap(),
+            AUTH_SCA_STARTED
+        );
+        assert_eq!(
+            authorisation_transition(AUTH_SCA_STARTED, "sca_finalised").unwrap(),
+            AUTH_FINALISED
+        );
         // decoupled/embedded ride the same machine (the approach selects
         // the ceremony, not different states).
-        assert_eq!(authorisation_transition(AUTH_RECEIVED, "sca_finalised").unwrap(), AUTH_FINALISED);
+        assert_eq!(
+            authorisation_transition(AUTH_RECEIVED, "sca_finalised").unwrap(),
+            AUTH_FINALISED
+        );
         // failure + expiry are terminal for the sub-resource.
-        assert_eq!(authorisation_transition(AUTH_SCA_STARTED, "sca_failed").unwrap(), AUTH_FAILED);
+        assert_eq!(
+            authorisation_transition(AUTH_SCA_STARTED, "sca_failed").unwrap(),
+            AUTH_FAILED
+        );
         assert_eq!(authorisation_transition(AUTH_FAILED, "sca_finalised"), None);
-        assert_eq!(authorisation_transition(AUTH_RECEIVED, "expired").unwrap(), AUTH_EXPIRED);
-        assert_eq!(authorisation_transition(AUTH_EXPIRED, "sca_finalised"), None);
+        assert_eq!(
+            authorisation_transition(AUTH_RECEIVED, "expired").unwrap(),
+            AUTH_EXPIRED
+        );
+        assert_eq!(
+            authorisation_transition(AUTH_EXPIRED, "sca_finalised"),
+            None
+        );
         // finalised is terminal (a new ceremony mints a new sub-resource).
         assert_eq!(authorisation_transition(AUTH_FINALISED, "sca_failed"), None);
     }
