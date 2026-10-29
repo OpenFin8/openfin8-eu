@@ -5,16 +5,15 @@
 
 //! OpenAPI spec for OpenFin8:EU.
 //!
-//!- the VENDORED case: the Berlin Group openFinance
+//! The VENDORED case: the Berlin Group openFinance
 //! OpenAPI files are published under Creative Commons Attribution 4.0
 //! (CC BY 4.0) - the licence notice explicitly permits copying and
 //! adaptation with attribution - so this adapter MAY carry the
 //! openFinance resource paths in its published spec **with the BG
 //! attribution preserved** (the *Implementation Guidelines*
 //! documents are CC BY-ND and are never copied; the normative
-//! reference remains them). The utoipa aggregate below therefore
-//! grows to include the openFinance resource annotations as the
-//! XS2A wire lands), and the notice travels in the
+//! reference remains them). The utoipa aggregate carries the
+//! openFinance resource annotations, and the notice travels in the
 //! spec's info block.
 //!
 //! The drift guard (`tests/openapi_publication.rs`) asserts the
