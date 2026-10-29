@@ -7,7 +7,7 @@
 //! platform enforces tree-wide; the EU adapter's own surface).
 //!
 //! Both directions: every SERVED route must be spec'd AND every spec'd
-//! path must be served (the OAPEC-1 contract; the published
+//! path must be served (the contract; the published
 //! `docs/openapi.json` is the site/API-page source - a served-but-
 //! unspec'd route is invisible in the docs, a spec'd-but-unserved path
 //! is a lie). The route table is `router::route_table()` - the SAME

@@ -63,7 +63,7 @@ const M2M_GRANTS: &[M2mGrant] = &[
         workload: "openfin8-eu-policy",
         scopes: &["sentin8:bus:consume", "sentin8:stat:measure"],
     },
-    // VDC-4 tenant-snapshot API workload: the env-init consumer fetches
+    // tenant-snapshot API workload: the env-init consumer fetches
     // tenant identity for issuer/callback derivation.
     M2mGrant {
         workload: "openfin8-eu-sys",
@@ -87,7 +87,7 @@ const M2M_GRANTS: &[M2mGrant] = &[
             "bank8:payments:payments:write",
         ],
     },
-    // TLS-RLS-4: the database-free HostContextResolver's resolve workload.
+    // the database-free HostContextResolver's resolve workload.
     M2mGrant {
         workload: "openfin8-eu-tls",
         scopes: &["sentin8:sys:instances:read"],
