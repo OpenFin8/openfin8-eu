@@ -2,18 +2,422 @@
   "openapi": "3.1.0",
   "info": {
     "title": "openfin8-eu",
-    "version": "0.1.0",
-    "description": "Sentin8 OpenFin8:EU - European open finance (Berlin Group openFinance V2: AIS/PIS/PIIS, SCA approaches, eIDAS certificates). The openFinance OpenAPI files are CC BY 4.0; resource paths carried with attribution."
+    "description": "Sentin8 OpenFin8:EU - European open finance (Berlin Group openFinance V2: AIS/PIS/PIIS over XS2A, the three SCA approaches, eIDAS QWAC/QSEALC certificates, signing baskets). The openFinance OpenAPI files are published under Creative Commons Attribution 4.0 (CC BY 4.0); resource paths carried with the attribution preserved. The normative reference remains the Implementation Guidelines.",
+    "license": {
+      "name": "MIT OR Apache-2.0",
+      "identifier": "MIT OR Apache-2.0"
+    },
+    "version": "0.1.0"
   },
   "paths": {
-    "/v1/health": {
+    "/v1/consents": {
+      "post": {
+        "tags": [
+          "consent"
+        ],
+        "summary": "`POST /v1/consents` - create an XS2A consent (the `received` state;\nthe PSU ceremony has not begun).",
+        "operationId": "create_consent",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateConsentRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Consent created (status received)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConsentResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid service/scopes"
+          },
+          "401": {
+            "description": "Not authenticated"
+          }
+        },
+        "security": []
+      }
+    },
+    "/v1/consents/{id}": {
       "get": {
+        "tags": [
+          "consent"
+        ],
+        "summary": "`GET /v1/consents/{id}` - consent detail (the four-state status).",
+        "operationId": "get_consent",
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "Consent detail",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConsentResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown consent"
+          }
+        },
+        "security": []
+      }
+    },
+    "/v1/consents/{id}/authorisations": {
+      "get": {
+        "tags": [
+          "consent"
+        ],
+        "operationId": "list_authorisations",
+        "responses": {
+          "200": {
+            "description": "Authorisation list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthorisationListResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown consent"
+          }
+        },
+        "security": []
+      },
+      "post": {
+        "tags": [
+          "consent"
+        ],
+        "summary": "`POST /v1/consents/{id}/authorisations` - the pre-step: create an\nauthorisation sub-resource (each SCA ceremony is its own object),\noptionally selecting the SCA approach BEFORE the PSU ceremony begins.",
+        "operationId": "start_authorisation",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StartAuthorisationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Authorisation sub-resource created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthorisationResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Approach not served by this deployment"
+          },
+          "404": {
+            "description": "Unknown consent"
+          }
+        },
+        "security": []
+      }
+    },
+    "/v1/consents/{id}/authorisations/{authorisationId}": {
+      "get": {
+        "tags": [
+          "consent"
+        ],
+        "summary": "`GET /v1/consents/{id}/authorisations/{authId}` - one authorisation\nsub-resource (the decoupled-SCA poll target).",
+        "operationId": "get_authorisation",
+        "responses": {
+          "200": {
+            "description": "Authorisation detail",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthorisationResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown authorisation"
+          }
+        },
+        "security": []
+      }
+    },
+    "/v1/consents/{id}/status": {
+      "get": {
+        "tags": [
+          "consent"
+        ],
+        "operationId": "get_consent_status",
+        "responses": {
+          "200": {
+            "description": "Consent status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConsentStatusResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown consent"
+          }
+        },
+        "security": []
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AuthorisationListResponse": {
+        "type": "object",
+        "description": "`GET /v1/consents/{id}/authorisations` - list the consent's\nauthorisation sub-resources (the TPP polls these under decoupled SCA).",
+        "required": [
+          "authorisations"
+        ],
+        "properties": {
+          "authorisations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AuthorisationResponse"
+            },
+            "description": "The consent's authorisation sub-resources."
+          }
+        }
+      },
+      "AuthorisationResponse": {
+        "type": "object",
+        "description": "An authorisation sub-resource document (wire shape).",
+        "required": [
+          "authorisationId",
+          "consentId",
+          "status",
+          "approach",
+          "createdAt"
+        ],
+        "properties": {
+          "approach": {
+            "type": "string",
+            "description": "The SCA approach this ceremony runs."
+          },
+          "authorisationId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The authorisation id."
+          },
+          "consentId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The parent consent id."
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Creation timestamp."
+          },
+          "expiresAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "The ceremony's expiry."
+          },
+          "flowExecutionId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "The Flow execution driving the ceremony (absent until started)."
+          },
+          "psuId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The PSU identity once identified."
+          },
+          "status": {
+            "type": "string",
+            "description": "The per-approach authorisation status."
+          }
+        }
+      },
+      "ConsentResponse": {
+        "type": "object",
+        "description": "The XS2A consent document (wire shape).",
+        "required": [
+          "consentId",
+          "customerId",
+          "service",
+          "status",
+          "scopes",
+          "createdAt"
+        ],
+        "properties": {
+          "consentId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The consent id."
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Creation timestamp."
+          },
+          "customerId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The PSU the consent belongs to."
+          },
+          "expiresAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Expiry (absent for unlimited consents)."
+          },
+          "frequencyPerDay": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "AIS frequency per day (absent for one-shot access)."
+          },
+          "lookbackDays": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "AIS transaction lookback (days)."
+          },
+          "scopes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The requested scopes."
+          },
+          "service": {
+            "type": "string",
+            "description": "The XS2A service (`ais` | `pis` | `piis`)."
+          },
+          "status": {
+            "type": "string",
+            "description": "The four-state XS2A consent status."
+          }
+        }
+      },
+      "ConsentStatusResponse": {
+        "type": "object",
+        "description": "`GET /v1/consents/{id}/status` - the XS2A consent status resource\n(the four-state machine view).",
+        "required": [
+          "consentId",
+          "status"
+        ],
+        "properties": {
+          "consentId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The consent id."
+          },
+          "status": {
+            "type": "string",
+            "description": "The four-state XS2A status."
+          }
+        }
+      },
+      "CreateConsentRequest": {
+        "type": "object",
+        "description": "`POST /v1/consents` request - the XS2A consent creation.",
+        "required": [
+          "customerId",
+          "service"
+        ],
+        "properties": {
+          "customerId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The PSU (bank customer) the consent is for."
+          },
+          "expiresInDays": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "The consent's validity window (absent = no expiry; XS2A caps AIS\nat 90 days)."
+          },
+          "frequencyPerDay": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "AIS: the max access frequency per day (absent = one-shot)."
+          },
+          "lookbackDays": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "AIS: the transaction lookback window (days from grant)."
+          },
+          "recipientId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The recipient (TPP) handle."
+          },
+          "scopes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The requested OAuth scopes (`openfin8:eu:*` vocabulary)."
+          },
+          "service": {
+            "type": "string",
+            "description": "The XS2A service: `ais` | `pis` | `piis`."
+          }
+        }
+      },
+      "StartAuthorisationRequest": {
+        "type": "object",
+        "description": "The pre-step request: `POST /v1/consents/{id}/authorisations` -\nstart an authorisation sub-resource (optionally selecting the SCA\napproach BEFORE the PSU ceremony begins - EU DESIGN.md §3 ceremony 4).",
+        "properties": {
+          "approach": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The SCA approach for this ceremony (defaults to the mandatory\n`redirect`)."
           }
         }
       }
     }
-  }
+  },
+  "security": []
 }

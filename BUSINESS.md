@@ -1,8 +1,10 @@
 # OpenFin8:EU - Business Requirements & Functionality
 
-> Status: **IN DESIGN** (OBARCH-7). This BRD records the business
+> Status: **IN IMPLEMENTATION** (OBARCH-7). This BRD records the business
 > scope the European adapter will deliver; section 9 lists the
-> implementation acceptance criteria (the service is a skeleton).
+> implementation acceptance criteria - the consent + authorisation
+> model (bullet 2) has LANDED (backlog EU-2); the service is otherwise
+> a skeleton (bullet 1 - current state).
 >
 > Audience: product owners, business analysts. For architecture read
 > `README.md`; for wire-level detail read `DESIGN.md`.
@@ -110,9 +112,13 @@ The kernel + platform set, plus: **eIDAS QWAC/QSEALC certificates**
 - The skeleton builds + the publication guard passes (vendored with
   CC BY attribution) - **current state**.
 - The XS2A consent + authorisation model over the kernel lands (the
-  four-state consent machine + the pre-step).
+  four-state consent machine + the pre-step) - **LANDED (EU-2)**:
+  `src/consent.rs` + the `openfin8_eu` schema + the Consent API
+  routes; the state machines are pure + unit-tested.
 - All three SCA approach ceremonies green against Auth (redirect
-  mandatory; decoupled + embedded conditional).
+  mandatory; decoupled + embedded conditional) - **open (EU-3)**:
+  the served-list validation + the pre-step approach selection are
+  in; the per-approach Flow step sequences land with EU-3.
 - The signing-basket batch flow + the ISO payment products through
   Payments.
 - The e2e journey gains the redirect-SCA AIS + PIS flows.

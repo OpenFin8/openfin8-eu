@@ -1,13 +1,25 @@
 # openfin8-eu - Detailed Design Document
 
-> Status: **PROPOSED** - the European open-finance adapter (OBARCH-7).
-> The Berlin Group **openFinance API Framework** (the NextGenPSD2
-> successor - the standard's own name moved to open finance), V2
-> line (XS2A V2.4.x, Consent API 2.2.x). Depends on:
-> `openfin8-core` (OBARCH-1). Read `openfin8-uk/DESIGN.md` for the
-> sibling design; this document defines the EU deltas. **Note**: the
-> heaviest adapter of the set - three SCA interaction modes, no
-> central directory, and PSD3/FDA in flight.
+> Status: **IN IMPLEMENTATION** - the European open-finance adapter
+> (OBARCH-7). The Berlin Group **openFinance API Framework** (the
+> NextGenPSD2 successor - the standard's own name moved to open
+> finance), V2 line (XS2A V2.4.x, Consent API 2.2.x). Depends on:
+> `openfin8-core` (OBARCH-1; `Profile::european_union()` on tag
+> `openfin8-v0.1.2`). Read `openfin8-uk/DESIGN.md` for the sibling
+> design; this document defines the EU deltas. **Note**: the heaviest
+> adapter of the set - three SCA interaction modes, no central
+> directory, and PSD3/FDA in flight.
+>
+> **Landed (backlog EU-1/EU-2)**: the XS2A consent + authorisation
+> model - the four-state consent machine + the authorisation
+> sub-resources + the pre-step over the schema `openfin8_eu`
+> (`src/consent.rs`, `sql/init.sql`, the Consent API routes in
+> `src/router.rs`, the full registration fragment, the EU-only
+> published spec). **Open**: the SCA ceremony step sequences (EU-3),
+> the eIDAS/DCR trust path (EU-4), PIS + signing baskets through
+> Payments (EU-5), the AIS/PIIS resource surfaces (EU-6), the
+> Extended Services (EU-7), the e2e journey (EU-8), the vendored
+> openFinance paths + site unit (EU-9).
 
 ## 1. Scope & Context
 
@@ -67,11 +79,28 @@ are ISO pain/pacs message families).
 4. **Pre-step authorization** - each authorisation sub-resource
    carries the SCA selection before the PSU ceremony begins.
 
-**Consent lifecycle mapping** (core ↔ XS2A):
+**Consent lifecycle mapping** (core ↔ XS2A - IMPLEMENTED in
+`src/consent.rs`, the pure tables `consent_transition` /
+`authorisation_transition` unit-tested):
 `awaiting_authorization` (received) → `active` (valid) →
-`revoked`/`expired`. The authorisation sub-resources ride
-`intent_payload`; core's state machine holds; the per-approach
-ceremonies are adapter + Flow steps.
+`revoked`/`expired` (with `rejected` on the PSU-deny path). The
+authorisation sub-resources ride their own per-approach machine
+(`received` → `psu_identified` → `psu_authenticated` →
+`sca_started` → `finalised` | `failed` | `expired` - `failed` and
+`expired` are terminal for the sub-resource; a new ceremony mints a
+NEW sub-resource). SCA success is never conflated with the grant:
+the consent transitions only through the observation path
+(`observe_authorisation_outcome`); the per-approach step sequences
+are adapter + Flow steps (EU-3).
+
+**The served-approach configuration** (IMPLEMENTED):
+`OPENFIN8_EU_SCA_APPROACHES` (comma-separated; default
+`redirect` - the conservative start per §8's embedded-SCA decision).
+The list is validated at boot (`validate_served_approaches`):
+`redirect` is mandatory - a configuration that omits it is corrected
+loudly, never silently served without it; an approach selection
+outside the served list is a 400 at the pre-step
+(`validate_approach_selection`), never a silent fallback.
 
 ## 4. Money Movement
 

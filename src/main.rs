@@ -16,10 +16,10 @@
 //! resource router.
 //!
 //! Skeleton - the OBARCH-1 core extraction lands first; this binary
-//! then takes the OB wire handlers, the intent-based consent model
-//! over core's `awaiting_authorization` state, and its registration
-//! data. Auth gains the FAPI 1 Advanced profile flag alongside
-//! (sequenced with this adapter).
+//! then takes the XS2A consent + authorisation model over core's
+//! `awaiting_authorization` state (the four-state XS2A consent
+//! machine + the pre-step), the SCA approach ceremonies, and its
+//! registration data.
 //!
 //! Spec publication (OBARCH-2) is the vendored-with-attribution case:
 //! the Berlin Group OpenAPI files are CC BY 4.0 (copying and
@@ -29,26 +29,17 @@
 
 use utoipa::OpenApi;
 
-mod openapi;
+use openfin8_eu_server::{openapi, registration, router};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     sentin8::shell::serve(
         sentin8::shell::Sentin8Shell::new("openfin8:eu", "OPENFIN8_EU")
-            .with_registration(print_registration_stub)
+            .with_registration(registration::print)
             .with_own_health()
+            .with_state(router::build_state)
+            .with_router(router::routes)
             .with_openapi(openapi::EUOpenApi::openapi()),
     )
     .await
-}
-
-/// Registration stub - the full registration data (policy sets,
-/// Shield gates `openfin8:eu:*` role-scoped, admin UI pages, SQL
-/// migrations, the staged-intent expiry schedule) lands with the
-/// OBARCH-1 extraction; the shape follows the `openfin8-us`
-/// registration (per-jurisdiction identity).
-fn print_registration_stub(section: Option<String>) -> anyhow::Result<()> {
-    // Placeholder until the registration module lands (OBARCH-7).
-    let _ = section;
-    Ok(())
 }

@@ -10,7 +10,7 @@ edition = "2021"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/OpenFin8/openfin8-eu"
 rust-version = "1.85"
-description = "Sentin8 OpenFin8:EU - UK open banking: the OBL Read/Write API ASPSP surface (FAPI 1 Advanced, intent-based consents, JWS signing)."
+description = "Sentin8 OpenFin8:EU - European open finance: the Berlin Group openFinance V2 XS2A surface (AIS/PIS/PIIS, the three SCA approaches, eIDAS certificates, signing baskets)."
 
 [[bin]]
 name = "openfin8-eu"
@@ -23,12 +23,12 @@ path = "src/lib.rs"
 [dependencies]
 # Platform SDK pin (RS 2.3) - the only cross-repo dependency; carries the
 # entire shared library workspace behind the `sentin8` facade.
-sentin8 = { git = "https://github.com/Sentin8/sentin8-sdk", tag = "sdk-v0.6.7" }
+sentin8 = { git = "https://github.com/Sentin8/sentin8-sdk", tag = "sdk-v0.6.19" }
 # bank8 namespace facade pin - carries this vertical's contracts/clients.
 bank8 = { git = "https://github.com/Bank8-dev/bank8-sdk", tag = "bank8-v0.5.8" }
 # The open-banking kernel (OBARCH-1): consent ledger, recipient registry,
 # CSDF, notifications, admin, the adapter traits, and the shared FDX wire.
-openfin8-core = { git = "https://github.com/OpenFin8/openfin8-core", tag = "openfin8-v0.1.0" }
+openfin8-core = { git = "https://github.com/OpenFin8/openfin8-core", tag = "openfin8-v0.1.2" }
 
 axum = { version = "0.8", features = ["macros"] }
 tokio = { version = "1", features = ["full"] }

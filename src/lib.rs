@@ -5,5 +5,11 @@
 
 //! Library target for the openfin8-eu service (the integration
 //! tests and the e2e harness link against this; the binary is
-//! `src/main.rs`). The service modules land with the OBARCH
-//! implementation - see DESIGN.md.
+//! `src/main.rs`). The XS2A consent + authorisation model lives in
+//! `consent.rs`; the routes in `router.rs`; the registration data in
+//! `registration.rs` - see DESIGN.md (OBARCH-7).
+
+pub mod consent;
+pub mod openapi;
+pub mod registration;
+pub mod router;
