@@ -3,6 +3,12 @@
   "services": [
     {
       "service_type": "openfin8:eu",
+      "extra_env": {
+        "OPENFIN8_EU_QWAC_CERT_REF": "sentin8-secrets://openfin8-eu/qwac-cert",
+        "OPENFIN8_EU_QWAC_KEY_REF": "sentin8-secrets://openfin8-eu/qwac-key",
+        "OPENFIN8_EU_QSEALC_CERT_REF": "sentin8-secrets://openfin8-eu/qsealc-cert",
+        "OPENFIN8_EU_QSEALC_KEY_REF": "sentin8-secrets://openfin8-eu/qsealc-key"
+      },
       "telemetry_property": {
         "slug": "openfin8-eu",
         "name": "OpenFin8:EU Telemetry"
