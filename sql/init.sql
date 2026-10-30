@@ -249,13 +249,17 @@ CREATE INDEX IF NOT EXISTS idx_openfin8_eu_audit_unpushed
     WHERE NOT pushed;
 
 -- ── RLS: FORCE on every tenant-scoped table; env_id-pinned policies ──
+-- signing_basket_items is the basket's CHILD row set (env hangs off the
+-- parent basket via basket_id); items join by basket_id only - it sits
+-- OUTSIDE the env_id-pinned RLS loop (the policy predicate would not
+-- resolve - the table carries no env_id column of its own).
 DO $$
 DECLARE
     t TEXT;
 BEGIN
     FOREACH t IN ARRAY ARRAY[
         'consents', 'consent_authorisations', 'signing_baskets',
-        'signing_basket_items', 'recipients', 'recipient_consents'
+        'recipients', 'recipient_consents'
     ]
     LOOP
         EXECUTE format('ALTER TABLE openfin8_eu.%I ENABLE ROW LEVEL SECURITY', t);

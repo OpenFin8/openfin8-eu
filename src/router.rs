@@ -21,7 +21,9 @@
 //! up); a missing transport degrades loudly at the handler gate (503),
 //! never silently.
 
+use axum::Json;
 use axum::routing::{get, post};
+use openfin8_core::dtos::ServiceHealth;
 use openfin8_core::profile::Profile;
 
 use crate::ais;
@@ -29,6 +31,17 @@ use crate::ceremony;
 use crate::consent::{self, AppState};
 use crate::extended;
 use crate::payments;
+
+/// Liveness/build identity (the shell's default health is suppressed —
+/// `with_own_health`; the captain probes the registration's health_path).
+async fn health() -> Json<ServiceHealth> {
+    Json(ServiceHealth {
+        status: "ok".into(),
+        service: "openfin8:eu".into(),
+        version: sentin8::build_info::id().into(),
+        build: sentin8::build_info::build_hash().into(),
+    })
+}
 
 /// Build a cert-presenting HTTP transport for `workload` (CERTFREE-4V,
 /// the kernel `server.rs` precedent): mint-or-load the Acme-issued pair
@@ -309,5 +322,5 @@ pub fn route_table() -> &'static [(&'static str, &'static str)] {
 /// The EU routes: the Consent API + the SCA ceremonies + PIS + signing
 /// baskets + AIS/PIIS + the Extended Services (adapter-owned XS2A).
 pub fn routes(router: axum::Router<AppState>, state: AppState) -> axum::Router<AppState> {
-    eu_routes!(router).with_state(state)
+    eu_routes!(router).route("/v1/health", get(health)).with_state(state)
 }
