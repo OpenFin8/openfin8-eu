@@ -152,12 +152,16 @@ async fn require_valid_consent(
     service: &str,
 ) -> Result<(Uuid, Vec<String>), (StatusCode, String)> {
     // The Shield gate first (step 5 - the ONLY authorization gate).
-    consent::authorize(state, headers, "consents:read").await?;
+    let a = consent::authorize(state, headers, "consents:read").await?;
+    // Same-transaction discipline: the tenant context is transaction-local
+    // (set_config(..., true)) - begin() + context + query on one tx, else
+    // FORCE RLS hides the consent row.
     let mut conn = state
         .pool
-        .acquire()
+        .begin()
         .await
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    consent::set_tenant_context_pub(&mut conn, a.env_id()).await;
     let row = sqlx::query(
         "SELECT env_id, customer_id, status, service, scopes, expires_at \
            FROM openfin8_eu.consents WHERE id = $1",

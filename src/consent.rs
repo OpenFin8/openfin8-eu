@@ -466,8 +466,12 @@ pub async fn emit_event_pub(
 )]
 pub async fn create_consent(
     State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
     Json(req): Json<CreateConsentRequest>,
 ) -> Result<(StatusCode, Json<ConsentResponse>), (StatusCode, String)> {
+    // The Shield gate first: the gate's AuthContext carries the caller's
+    // env (a thread_local stamp does NOT survive .await yields).
+    let a = authorize(&state, &headers, "consents:write").await?;
     if !matches!(
         req.service.as_str(),
         SERVICE_AIS | SERVICE_PIS | SERVICE_PIIS
@@ -485,7 +489,7 @@ pub async fn create_consent(
         .begin()
         .await
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-    set_tenant_context(&mut tx, uuid_env()).await;
+    set_tenant_context(&mut tx, a.env_id()).await;
     let expires_at = req
         .expires_in_days
         .map(|d| chrono::Utc::now() + chrono::Duration::days(d.min(90) as i64));
@@ -497,7 +501,7 @@ pub async fn create_consent(
            RETURNING id, customer_id, service, status, scopes, frequency_per_day,
                      lookback_days, expires_at, created_at"#,
     )
-    .bind(uuid_env())
+    .bind(a.env_id())
     .bind(req.customer_id)
     .bind(req.recipient_id.as_deref())
     .bind(&req.service)
@@ -511,7 +515,7 @@ pub async fn create_consent(
     let consent_id: Uuid = row.get("id");
     emit_event(
         &mut tx,
-        uuid_env(),
+        a.env_id(),
         "consent:created",
         serde_json::json!({ "consent_id": consent_id, "service": req.service, "status": "received" }),
     )
@@ -549,13 +553,20 @@ pub async fn create_consent(
 )]
 pub async fn get_consent(
     State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
     Path(id): Path<Uuid>,
 ) -> Result<Json<ConsentResponse>, (StatusCode, String)> {
+    // The Shield gate first (create_consent precedent).
+    let a = authorize(&state, &headers, "consents:read").await?;
+    // Same-transaction discipline: the tenant context is transaction-local
+    // (set_config(..., true)) - begin() + context + query on one tx, else
+    // FORCE RLS hides the row.
     let mut conn = state
         .pool
-        .acquire()
+        .begin()
         .await
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    set_tenant_context(&mut conn, a.env_id()).await;
     let row = sqlx::query(
         r#"SELECT id, customer_id, service, status, scopes, frequency_per_day,
                   lookback_days, expires_at, created_at
@@ -602,13 +613,18 @@ pub struct ConsentStatusResponse {
 )]
 pub async fn get_consent_status(
     State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
     Path(id): Path<Uuid>,
 ) -> Result<Json<ConsentStatusResponse>, (StatusCode, String)> {
+    // The Shield gate first (create_consent precedent).
+    let a = authorize(&state, &headers, "consents:read").await?;
+    // Same-transaction discipline (get_consent precedent).
     let mut conn = state
         .pool
-        .acquire()
+        .begin()
         .await
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    set_tenant_context(&mut conn, a.env_id()).await;
     let row = sqlx::query("SELECT status FROM openfin8_eu.consents WHERE id = $1")
         .bind(id)
         .fetch_optional(&mut *conn)
@@ -638,9 +654,13 @@ pub async fn get_consent_status(
 )]
 pub async fn start_authorisation(
     State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
     Path(consent_id): Path<Uuid>,
     Json(req): Json<StartAuthorisationRequest>,
 ) -> Result<(StatusCode, Json<AuthorisationResponse>), (StatusCode, String)> {
+    // The Shield gate first (create_consent precedent: the AuthContext's
+    // env - a thread_local stamp does not survive .await yields).
+    let a = authorize(&state, &headers, "consents:write").await?;
     // The approach selection is validated against the SERVED list - the
     // honest configuration (an unserved approach is a 400, never a
     // silent fallback).
@@ -654,7 +674,7 @@ pub async fn start_authorisation(
         .begin()
         .await
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-    set_tenant_context(&mut tx, uuid_env()).await;
+    set_tenant_context(&mut tx, a.env_id()).await;
     // The consent must exist and not be terminal (XS2A: a rejected/expired/
     // revoked consent cannot start a new ceremony).
     let consent_status: String =
@@ -679,7 +699,7 @@ pub async fn start_authorisation(
            VALUES ($1, $2, 'received', $3, now() + interval '10 minutes')
            RETURNING id, consent_id, status, approach, psu_id, flow_execution_id, expires_at, created_at"#,
     )
-    .bind(uuid_env())
+    .bind(a.env_id())
     .bind(consent_id)
     .bind(&approach)
     .fetch_one(&mut *tx)
@@ -688,7 +708,7 @@ pub async fn start_authorisation(
     let authorisation_id: Uuid = row.get("id");
     emit_event(
         &mut tx,
-        uuid_env(),
+        a.env_id(),
         "authorisation:started",
         serde_json::json!({
             "authorisation_id": authorisation_id,
@@ -738,13 +758,18 @@ pub struct AuthorisationListResponse {
 )]
 pub async fn list_authorisations(
     State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
     Path(consent_id): Path<Uuid>,
 ) -> Result<Json<AuthorisationListResponse>, (StatusCode, String)> {
+    // The Shield gate first (create_consent precedent).
+    let a = authorize(&state, &headers, "consents:read").await?;
+    // Same-transaction discipline (get_consent precedent).
     let mut conn = state
         .pool
-        .acquire()
+        .begin()
         .await
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    set_tenant_context(&mut conn, a.env_id()).await;
     let rows = sqlx::query(
         r#"SELECT id, consent_id, status, approach, psu_id, flow_execution_id, expires_at, created_at
              FROM openfin8_eu.consent_authorisations
@@ -785,13 +810,18 @@ pub async fn list_authorisations(
 )]
 pub async fn get_authorisation(
     State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
     Path((_consent_id, authorisation_id)): Path<(Uuid, Uuid)>,
 ) -> Result<Json<AuthorisationResponse>, (StatusCode, String)> {
+    // The Shield gate first (create_consent precedent).
+    let a = authorize(&state, &headers, "consents:read").await?;
+    // Same-transaction discipline (get_consent precedent).
     let mut conn = state
         .pool
-        .acquire()
+        .begin()
         .await
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    set_tenant_context(&mut conn, a.env_id()).await;
     let row = sqlx::query(
         r#"SELECT id, consent_id, status, approach, psu_id, flow_execution_id, expires_at, created_at
              FROM openfin8_eu.consent_authorisations WHERE id = $1"#,
@@ -819,6 +849,7 @@ pub async fn get_authorisation(
 /// `sca_failed` with the PSU's explicit deny drives `rejected`.
 pub async fn observe_authorisation_outcome(
     pool: &PgPool,
+    env_id: Uuid,
     consent_id: Uuid,
     authorisation_id: Uuid,
     event: &str,
@@ -827,7 +858,7 @@ pub async fn observe_authorisation_outcome(
         .begin()
         .await
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-    set_tenant_context(&mut tx, uuid_env()).await;
+    set_tenant_context(&mut tx, env_id).await;
     // The authorisation's own machine transition first.
     let auth_status: String = sqlx::query_scalar(
         "SELECT status FROM openfin8_eu.consent_authorisations WHERE id = $1 FOR UPDATE",
@@ -876,7 +907,7 @@ pub async fn observe_authorisation_outcome(
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
     emit_event(
         &mut tx,
-        uuid_env(),
+        env_id,
         &format!("authorisation:{event}"),
         serde_json::json!({
             "consent_id": consent_id,
@@ -897,7 +928,7 @@ pub async fn observe_authorisation_outcome(
 /// caller's env claim - the gate ran before any handler reaches this).
 /// Falls back to nil only on the ungated paths (the RLS policies
 /// enforce env scoping regardless - a nil stamp matches nothing).
-fn uuid_env() -> Uuid {
+pub fn uuid_env() -> Uuid {
     ENV_ID.with(|c| c.get())
 }
 

@@ -64,9 +64,12 @@ pub struct RedirectStartResponse {
 /// with the ceremony outcome).
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct RedirectCallbackRequest {
-    /// The authorisation id the start response carried.
-    #[serde(rename = "authorisationId")]
-    pub authorisation_id: Uuid,
+    /// The authorisation id the start response carried (OPTIONAL in the
+    /// body: the path carries the authoritative id; when present it
+    /// must AGREE with the path or the callback 400s (never silently
+    /// accepts a mismatch).
+    #[serde(rename = "authorisationId", default)]
+    pub authorisation_id: Option<Uuid>,
     /// `sca_finalised` (the PSU completed SCA) | `psu_denied` (the PSU
     /// explicitly denied) | `sca_failed` (the challenge failed).
     pub outcome: String,
@@ -186,13 +189,23 @@ async fn load_authorisation(
 )]
 pub async fn start_redirect(
     State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
     Path((_consent_id, authorisation_id)): Path<(Uuid, Uuid)>,
 ) -> Result<Json<RedirectStartResponse>, (StatusCode, String)> {
+    // The Shield gate first: the gate's AuthContext carries the caller's
+    // env (a thread_local stamp does NOT survive .await yields - the
+    // task can resume on another worker thread).
+    let a = consent::authorize(&state, &headers, "consents:read").await?;
+    // Same-transaction discipline: the tenant context is transaction-local
+    // (set_config(..., true)) - begin() + context + query on one tx, else
+    // FORCE RLS hides the row (a bare autocommit connection loses the
+    // context at the first statement's implicit commit).
     let mut conn = state
         .pool
-        .acquire()
+        .begin()
         .await
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    consent::set_tenant_context_pub(&mut conn, a.env_id()).await;
     let (_consent, _status, approach, _psu) =
         load_authorisation(&mut conn, authorisation_id).await?;
     // Redirect ceremonies only: an approach mismatch is a 400, never a
@@ -205,7 +218,7 @@ pub async fn start_redirect(
     }
     // The redirect issuance IS the SCA start (received → sca_started
     // through the per-approach machine).
-    advance_authorisation(&state, authorisation_id, "sca_started").await?;
+    advance_authorisation(&state, a.env_id(), authorisation_id, "sca_started").await?;
     Ok(Json(RedirectStartResponse {
         authorisation_id,
         // The ASPSP SCA page this deployment serves (the platform
@@ -234,14 +247,21 @@ pub async fn start_redirect(
 )]
 pub async fn redirect_callback(
     State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
     Path((consent_id, authorisation_id)): Path<(Uuid, Uuid)>,
     Json(req): Json<RedirectCallbackRequest>,
 ) -> Result<Json<consent::ConsentStatusResponse>, (StatusCode, String)> {
+    // The Shield gate first (start_redirect precedent: the AuthContext's
+    // env - a thread_local stamp does not survive .await yields).
+    let a = consent::authorize(&state, &headers, "consents:read").await?;
+    // Same-transaction discipline (start_redirect precedent): the RLS
+    // tenant context is transaction-local.
     let mut conn = state
         .pool
-        .acquire()
+        .begin()
         .await
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    consent::set_tenant_context_pub(&mut conn, a.env_id()).await;
     let (row_consent, _status, approach, _psu) =
         load_authorisation(&mut conn, authorisation_id).await?;
     if row_consent != consent_id {
@@ -249,6 +269,15 @@ pub async fn redirect_callback(
             StatusCode::NOT_FOUND,
             "authorisation does not belong to consent".into(),
         ));
+    }
+    // The body's authorisationId (when present) must agree with the path.
+    if let Some(body_auth) = req.authorisation_id {
+        if body_auth != authorisation_id {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                "the body's authorisationId disagrees with the path".into(),
+            ));
+        }
     }
     if approach != SCA_APPROACH_REDIRECT {
         return Err((
@@ -285,6 +314,7 @@ pub async fn redirect_callback(
         "sca_finalised" => {
             consent::observe_authorisation_outcome(
                 &state.pool,
+                a.env_id(),
                 consent_id,
                 authorisation_id,
                 "sca_finalised",
@@ -294,6 +324,7 @@ pub async fn redirect_callback(
         "psu_denied" => {
             consent::observe_authorisation_outcome(
                 &state.pool,
+                a.env_id(),
                 consent_id,
                 authorisation_id,
                 "psu_denied",
@@ -301,10 +332,10 @@ pub async fn redirect_callback(
             .await?
         }
         "sca_failed" => {
-            advance_authorisation(&state, authorisation_id, "sca_failed").await?;
+            advance_authorisation(&state, a.env_id(), authorisation_id, "sca_failed").await?;
             // A failed challenge is retryable with a NEW sub-resource -
             // the consent state is untouched.
-            read_consent_status(&state, consent_id).await?
+            read_consent_status(&state, a.env_id(), consent_id).await?
         }
         other => {
             return Err((
@@ -335,13 +366,19 @@ pub async fn redirect_callback(
 )]
 pub async fn start_decoupled(
     State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
     Path((_consent_id, authorisation_id)): Path<(Uuid, Uuid)>,
 ) -> Result<Json<DecoupledStatusResponse>, (StatusCode, String)> {
+    // The Shield gate first (start_redirect precedent: the AuthContext's
+    // env - a thread_local stamp does not survive .await yields).
+    let a = consent::authorize(&state, &headers, "consents:read").await?;
+    // Same-transaction discipline (start_redirect precedent).
     let mut conn = state
         .pool
-        .acquire()
+        .begin()
         .await
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    consent::set_tenant_context_pub(&mut conn, a.env_id()).await;
     let (_consent, _status, approach, _psu) =
         load_authorisation(&mut conn, authorisation_id).await?;
     if approach != SCA_APPROACH_DECOUPLED {
@@ -351,7 +388,7 @@ pub async fn start_decoupled(
         ));
     }
     // The decoupled push IS the SCA start (received → sca_started).
-    advance_authorisation(&state, authorisation_id, "sca_started").await?;
+    advance_authorisation(&state, a.env_id(), authorisation_id, "sca_started").await?;
     Ok(Json(DecoupledStatusResponse {
         authorisation_id,
         status: "sca_started".into(),
@@ -374,13 +411,19 @@ pub async fn start_decoupled(
 )]
 pub async fn poll_decoupled(
     State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
     Path((consent_id, authorisation_id)): Path<(Uuid, Uuid)>,
 ) -> Result<Json<DecoupledStatusResponse>, (StatusCode, String)> {
+    // The Shield gate first (start_redirect precedent: the AuthContext's
+    // env - a thread_local stamp does not survive .await yields).
+    let a = consent::authorize(&state, &headers, "consents:read").await?;
+    // Same-transaction discipline (start_redirect precedent).
     let mut conn = state
         .pool
-        .acquire()
+        .begin()
         .await
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    consent::set_tenant_context_pub(&mut conn, a.env_id()).await;
     let (row_consent, status, approach, _psu) =
         load_authorisation(&mut conn, authorisation_id).await?;
     if row_consent != consent_id {
@@ -401,7 +444,7 @@ pub async fn poll_decoupled(
     .await
     .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
     if expired && !matches!(status.as_str(), "finalised" | "failed" | "expired") {
-        advance_authorisation(&state, authorisation_id, "expired").await?;
+        advance_authorisation(&state, a.env_id(), authorisation_id, "expired").await?;
         return Ok(Json(DecoupledStatusResponse {
             authorisation_id,
             status: "expired".into(),
@@ -431,13 +474,19 @@ pub async fn poll_decoupled(
 )]
 pub async fn start_embedded(
     State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
     Path((_consent_id, authorisation_id)): Path<(Uuid, Uuid)>,
 ) -> Result<Json<EmbeddedChallengeResponse>, (StatusCode, String)> {
+    // The Shield gate first (start_redirect precedent: the AuthContext's
+    // env - a thread_local stamp does not survive .await yields).
+    let a = consent::authorize(&state, &headers, "consents:read").await?;
+    // Same-transaction discipline (start_redirect precedent).
     let mut conn = state
         .pool
-        .acquire()
+        .begin()
         .await
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    consent::set_tenant_context_pub(&mut conn, a.env_id()).await;
     let (_consent, _status, approach, _psu) =
         load_authorisation(&mut conn, authorisation_id).await?;
     if approach != SCA_APPROACH_EMBEDDED {
@@ -450,7 +499,7 @@ pub async fn start_embedded(
     // deployment allows (the approach was already validated at the
     // pre-step against the served list; a served deployment reaches
     // here).
-    advance_authorisation(&state, authorisation_id, "sca_started").await?;
+    advance_authorisation(&state, a.env_id(), authorisation_id, "sca_started").await?;
     Ok(Json(EmbeddedChallengeResponse {
         authorisation_id,
         // The challenge data is opaque to the TPP (rendered, never
@@ -478,14 +527,20 @@ pub async fn start_embedded(
 )]
 pub async fn answer_embedded(
     State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
     Path((consent_id, authorisation_id)): Path<(Uuid, Uuid)>,
     Json(req): Json<EmbeddedAnswerRequest>,
 ) -> Result<Json<consent::ConsentStatusResponse>, (StatusCode, String)> {
+    // The Shield gate first (start_redirect precedent: the AuthContext's
+    // env - a thread_local stamp does not survive .await yields).
+    let a = consent::authorize(&state, &headers, "consents:read").await?;
+    // Same-transaction discipline (start_redirect precedent).
     let mut conn = state
         .pool
-        .acquire()
+        .begin()
         .await
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    consent::set_tenant_context_pub(&mut conn, a.env_id()).await;
     let (row_consent, _status, approach, _psu) =
         load_authorisation(&mut conn, authorisation_id).await?;
     if row_consent != consent_id {
@@ -512,14 +567,15 @@ pub async fn answer_embedded(
     let consent_status = if outcome == "sca_finalised" {
         consent::observe_authorisation_outcome(
             &state.pool,
+            a.env_id(),
             consent_id,
             authorisation_id,
             "sca_finalised",
         )
         .await?
     } else {
-        advance_authorisation(&state, authorisation_id, "sca_failed").await?;
-        read_consent_status(&state, consent_id).await?
+        advance_authorisation(&state, a.env_id(), authorisation_id, "sca_failed").await?;
+        read_consent_status(&state, a.env_id(), consent_id).await?
     };
     Ok(Json(consent::ConsentStatusResponse {
         consent_id,
@@ -533,6 +589,7 @@ pub async fn answer_embedded(
 /// observation - the ceremony routes drive it explicitly).
 async fn advance_authorisation(
     state: &AppState,
+    env_id: Uuid,
     authorisation_id: Uuid,
     event: &str,
 ) -> Result<String, (StatusCode, String)> {
@@ -541,6 +598,7 @@ async fn advance_authorisation(
         .begin()
         .await
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    consent::set_tenant_context_pub(&mut tx, env_id).await;
     let status: String = sqlx::query_scalar(
         "SELECT status FROM openfin8_eu.consent_authorisations WHERE id = $1 FOR UPDATE",
     )
@@ -572,13 +630,16 @@ async fn advance_authorisation(
 /// Read a consent's status.
 async fn read_consent_status(
     state: &AppState,
+    env_id: Uuid,
     consent_id: Uuid,
 ) -> Result<String, (StatusCode, String)> {
+    // Same-transaction discipline (start_redirect precedent).
     let mut conn = state
         .pool
-        .acquire()
+        .begin()
         .await
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    consent::set_tenant_context_pub(&mut conn, env_id).await;
     let status: String =
         sqlx::query_scalar("SELECT status FROM openfin8_eu.consents WHERE id = $1")
             .bind(consent_id)

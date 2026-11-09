@@ -162,9 +162,16 @@ pub fn canonical_payment_body(product: &str, payment: &serde_json::Value) -> Str
 )]
 pub async fn create_payment(
     State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
     Path(product): Path<String>,
     Json(req): Json<CreatePaymentRequest>,
 ) -> Result<(StatusCode, Json<PaymentResponse>), (StatusCode, String)> {
+    // The Shield gate first: it stamps the request-scoped ENV_ID (the
+    // outbox emit + the proxy lane resolve the caller's env through it).
+    // The scope vocabulary is the adapter's registered set
+    // (consents:read/write - the payments ARE consent-governed
+    // initiations under the EU policy).
+    let a = consent::authorize(&state, &headers, "consents:write").await?;
     validate_payment_product(&product).map_err(|e| (StatusCode::BAD_REQUEST, e))?;
     // EU invariant 1: every payment initiation verifies the QSEALC
     // signature. Fail-closed on all non-Verified verdicts.
@@ -216,6 +223,7 @@ pub async fn create_payment(
     // event is advisory - the Payments service owns the payment record).
     emit_payment_event(
         &state,
+        a.env_id(),
         &req.customer_id,
         "payment:initiated",
         serde_json::json!({
@@ -254,8 +262,11 @@ pub async fn create_payment(
 )]
 pub async fn get_payment_status(
     State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
     Path((product, payment_id)): Path<(String, String)>,
 ) -> Result<Json<PaymentResponse>, (StatusCode, String)> {
+    // The Shield gate first (create_payment precedent).
+    let a = consent::authorize(&state, &headers, "consents:read").await?;
     validate_payment_product(&product).map_err(|e| (StatusCode::BAD_REQUEST, e))?;
     let http = state
         .payments_http()
@@ -299,8 +310,11 @@ pub async fn get_payment_status(
 )]
 pub async fn cancel_payment(
     State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
     Path((product, payment_id)): Path<(String, String)>,
 ) -> Result<StatusCode, (StatusCode, String)> {
+    // The Shield gate first (create_payment precedent).
+    let a = consent::authorize(&state, &headers, "consents:write").await?;
     validate_payment_product(&product).map_err(|e| (StatusCode::BAD_REQUEST, e))?;
     let http = state
         .payments_http()
@@ -340,8 +354,12 @@ pub async fn cancel_payment(
 )]
 pub async fn create_basket(
     State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
     Json(req): Json<CreateBasketRequest>,
 ) -> Result<(StatusCode, Json<BasketResponse>), (StatusCode, String)> {
+    // The Shield gate first (create_payment precedent: it stamps the
+    // request-scoped ENV_ID).
+    let a = consent::authorize(&state, &headers, "consents:write").await?;
     if req.consent_ids.is_empty() && req.payment_ids.is_empty() {
         return Err((
             StatusCode::BAD_REQUEST,
@@ -353,12 +371,12 @@ pub async fn create_basket(
         .begin()
         .await
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-    consent::set_tenant_context_pub(&mut tx, state.env_id()).await;
+    consent::set_tenant_context_pub(&mut tx, a.env_id()).await;
     let row = sqlx::query(
         "INSERT INTO openfin8_eu.signing_baskets (env_id, customer_id, status) \
          VALUES ($1, $2, 'received') RETURNING id, status, created_at",
     )
-    .bind(state.env_id())
+    .bind(a.env_id())
     .bind(req.customer_id)
     .fetch_one(&mut *tx)
     .await
@@ -412,13 +430,19 @@ pub async fn create_basket(
 )]
 pub async fn get_basket(
     State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
     Path(basket_id): Path<Uuid>,
 ) -> Result<Json<BasketResponse>, (StatusCode, String)> {
+    // The Shield gate first (create_payment precedent).
+    let a = consent::authorize(&state, &headers, "consents:read").await?;
+    // Same-transaction discipline: the RLS tenant context is
+    // transaction-local - begin() + context + query on one tx.
     let mut conn = state
         .pool
-        .acquire()
+        .begin()
         .await
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    consent::set_tenant_context_pub(&mut conn, a.env_id()).await;
     let row =
         sqlx::query("SELECT id, status, created_at FROM openfin8_eu.signing_baskets WHERE id = $1")
             .bind(basket_id)
@@ -460,6 +484,7 @@ pub async fn get_basket(
 /// advisory; the domain-transaction coupling is the consent paths').
 async fn emit_payment_event(
     state: &AppState,
+    env_id: Uuid,
     _customer_id: &Uuid,
     resource_operation: &str,
     payload: serde_json::Value,
@@ -469,8 +494,8 @@ async fn emit_payment_event(
         .begin()
         .await
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-    consent::set_tenant_context_pub(&mut tx, state.env_id()).await;
-    consent::emit_event_pub(&mut tx, state.env_id(), resource_operation, payload)
+    consent::set_tenant_context_pub(&mut tx, env_id).await;
+    consent::emit_event_pub(&mut tx, env_id, resource_operation, payload)
         .await
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
     tx.commit()
