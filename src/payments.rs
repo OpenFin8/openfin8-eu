@@ -266,7 +266,7 @@ pub async fn get_payment_status(
     Path((product, payment_id)): Path<(String, String)>,
 ) -> Result<Json<PaymentResponse>, (StatusCode, String)> {
     // The Shield gate first (create_payment precedent).
-    let a = consent::authorize(&state, &headers, "consents:read").await?;
+    let _a = consent::authorize(&state, &headers, "consents:read").await?;
     validate_payment_product(&product).map_err(|e| (StatusCode::BAD_REQUEST, e))?;
     let http = state
         .payments_http()
@@ -314,7 +314,7 @@ pub async fn cancel_payment(
     Path((product, payment_id)): Path<(String, String)>,
 ) -> Result<StatusCode, (StatusCode, String)> {
     // The Shield gate first (create_payment precedent).
-    let a = consent::authorize(&state, &headers, "consents:write").await?;
+    let _a = consent::authorize(&state, &headers, "consents:write").await?;
     validate_payment_product(&product).map_err(|e| (StatusCode::BAD_REQUEST, e))?;
     let http = state
         .payments_http()
